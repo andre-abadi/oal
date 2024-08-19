@@ -1,7 +1,7 @@
 “oal” - Occasional Active Learning
 ================
 Andre Abadi
-2024-08-18
+2024-08-19
 
 ## Libraries
 
@@ -26,7 +26,7 @@ enron <-
     select = c("doc_id", "relevant", "content") # only these columns
   ) |> 
   as_tibble() |>
-  filter(relevant != 0) # drop rows where relevant = 0
+  filter(!is.na(relevant)) # drop rows where relevant = 0
 enron$content[23] |>
   str_wrap(width = 75) |>
   cat()
@@ -76,7 +76,21 @@ enron$content[23] |>
   cat()
 ```
 
-    ## review attachment final document provide starting review process
+    ## cash michelle email enron wholesale services office chairman mark frevert
+    ## chairman ceo mark haedicke managing director counsel subject confidential
+    ## information securities trading pace fluid fast changing demands equity
+    ## trading activities enron wholesale services ews recently revised official
+    ## policies procedures confidential information securities trading policies
+    ## procedures revisions reflect major developments equity trading activities
+    ## extended united kingdom effort streamline information flow process review
+    ## team play centralized role role resource required familiar comply policies
+    ## procedures newly revised policies procedures review legalonline intranet
+    ## website maintained enron wholesale services legal department click attached
+    ## link access legalonline certified compliance policies procedures calendar
+    ## certify time required review familiar revised policies procedures certified
+    ## compliance policies procedures calendar weeks receipt message legalonline
+    ## site quickly conveniently certify compliance line sap personal id questions
+    ## policies procedures call bob bruce extension donna lowry extension
 
 ### Message Lengths
 
@@ -124,7 +138,7 @@ enron$content[23] |>
   cat()
 ```
 
-    ## review attachment final document provide starting review process
+    ## cash michelle email enron wholesale services office chairman mark frevert
 
 ## Tokenize
 
@@ -154,10 +168,10 @@ enron$indices[23]
 ```
 
     ## [[1]]
-    ##     review attachment      final   document    provide   starting     review 
-    ##        177        634        358         37        150       1078        177 
-    ##    process 
-    ##        193
+    ##      cash  michelle     email     enron wholesale  services    office  chairman 
+    ##       361        86        75         1        46        48        27        18 
+    ##      mark   frevert 
+    ##        12        58
 
 ## Convert to Tensors
 
@@ -204,31 +218,39 @@ enron_tensor_dataset$.getitem(23)[[1]][enron_tensor_dataset$.getitem(23)[[1]] !=
 ```
 
     ## torch_tensor
-    ##   177
-    ##   634
-    ##   358
-    ##    37
-    ##   150
-    ##  1078
-    ##   177
-    ##   193
-    ## [ CPULongType{8} ]
+    ##  361
+    ##   86
+    ##   75
+    ##    1
+    ##   46
+    ##   48
+    ##   27
+    ##   18
+    ##   12
+    ##   58
+    ## [ CPULongType{10} ]
 
 ``` r
 enron_tensor_dataset$.getitem(23)[[2]]
 ```
 
     ## torch_tensor
-    ## 0
+    ## 1
     ## [ CPULongType{} ]
 
 ### Declare Model
 
 ``` r
 require(torch)
-embedding_dim <- 128  # Embedding dimension
+#
+# model variables
+#
+embedding_dim <- 64  # Embedding dimension
 max_len <- tensor_data$size(2)
 n_hidden <- 64  # Number of hidden units
+#
+# model setup
+#
 model <- nn_module(
   initialize = function(embed_dim, n_hidden, max_len) {
     self$embedding <- nn_embedding(
@@ -254,21 +276,21 @@ rm(
   embedding_dim,
   max_len, 
   n_hidden)
-```
-
-### Train Sigmoid
-
-``` r
-require(torch)
+#
+# training variables
+#
 batch_size <- 500  # Set your desired batch size
+optimizer <- optim_adam(nn$parameters, lr = 0.001)
+num_epochs <- 20
+#
+# training
+#
 dataloader <- dataloader(
   dataset = enron_tensor_dataset,  # Your custom dataset
   batch_size = batch_size,         # The batch size you want to use
   shuffle = TRUE                   # Whether to shuffle the data
 )
 criterion <- nn_bce_loss()
-optimizer <- optim_adam(nn$parameters, lr = 0.0001)
-num_epochs <- 10
 for (epoch in 1:num_epochs) {
   total_loss <- 0
   coro::loop(for (batch in dataloader) {
@@ -290,103 +312,26 @@ for (epoch in 1:num_epochs) {
 }
 ```
 
-    ## Epoch: 1 Average Loss: 0.7074712 
-    ## Epoch: 2 Average Loss: 0.675044 
-    ## Epoch: 3 Average Loss: 0.6459816 
-    ## Epoch: 4 Average Loss: 0.6378014 
-    ## Epoch: 5 Average Loss: 0.6176367 
-    ## Epoch: 6 Average Loss: 0.6063892 
-    ## Epoch: 7 Average Loss: 0.5945209 
-    ## Epoch: 8 Average Loss: 0.5844302 
-    ## Epoch: 9 Average Loss: 0.5755043 
-    ## Epoch: 10 Average Loss: 0.5616893
-
-``` r
-rm(
-  criterion, 
-  optimizer, 
-  num_epochs, 
-  epoch)
-```
-
-### TanH
-
-``` r
-require(torch)
-embedding_dim <- 128  # Embedding dimension
-max_len <- tensor_data$size(2)
-n_hidden <- 64  # Number of hidden units
-model <- nn_module(
-  initialize = function(embed_dim, n_hidden, max_len) {
-    self$embedding <- nn_embedding(
-      length(vocab) + 2, 
-      embed_dim, 
-      padding_idx = length(vocab) + 1)
-    self$hidden <- nn_linear(embed_dim * max_len, n_hidden)
-    self$output <- nn_linear(n_hidden, 1)
-    self$tanh <- nn_tanh()  # Use Tanh activation function
-  },
-  forward = function(x) {
-    x <- self$embedding(x)  # Embedding lookup
-    x <- torch_flatten(x, start_dim = 2)  # Flatten embeddings
-    x <- self$hidden(x)  # Pass through the hidden layer
-    x <- self$output(x)  # Pass through the output layer
-    x <- (self$tanh(x) + 1) / 2  # Map tanh output to [0, 1]
-    return(x)
-  }
-)
-nn <- model(embedding_dim, n_hidden, max_len)
-rm(
-  model, 
-  embedding_dim,
-  max_len, 
-  n_hidden)
-```
-
-### Train TanH
-
-``` r
-require(torch)
-batch_size <- 500  # Set your desired batch size
-dataloader <- dataloader(
-  dataset = enron_tensor_dataset,  # Your custom dataset
-  batch_size = batch_size,         # The batch size you want to use
-  shuffle = TRUE                   # Whether to shuffle the data
-)
-criterion <- nn_mse_loss()
-optimizer <- optim_adam(nn$parameters, lr = 0.0001)
-num_epochs <- 10
-for (epoch in 1:num_epochs) {
-  total_loss <- 0
-  coro::loop(for (batch in dataloader) {
-    batch_data <- 
-      batch[[1]]$to(dtype = torch_int64()) + torch_tensor(1, dtype = torch_int64())
-    batch_labels <- batch[[2]]$to(dtype = torch_float32())
-    optimizer$zero_grad()  # Reset gradients
-    output <- nn(batch_data) # Forward pass
-    loss <- criterion(output, batch_labels) # Compute loss
-    loss$backward() # Backward pass and optimize
-    optimizer$step()
-    total_loss <- total_loss + loss$item() # Accumulate loss for monitoring
-  })
-  cat("Epoch:", 
-      epoch, 
-      "Average Loss:", 
-      total_loss / length(dataloader), 
-      "\n")
-}
-```
-
-    ## Epoch: 1 Average Loss: 0.2704573 
-    ## Epoch: 2 Average Loss: 0.2619353 
-    ## Epoch: 3 Average Loss: 0.2610643 
-    ## Epoch: 4 Average Loss: 0.2580597 
-    ## Epoch: 5 Average Loss: 0.2579768 
-    ## Epoch: 6 Average Loss: 0.2549661 
-    ## Epoch: 7 Average Loss: 0.2556926 
-    ## Epoch: 8 Average Loss: 0.2549511 
-    ## Epoch: 9 Average Loss: 0.2552709 
-    ## Epoch: 10 Average Loss: 0.2530837
+    ## Epoch: 1 Average Loss: 0.4284099 
+    ## Epoch: 2 Average Loss: 0.05109073 
+    ## Epoch: 3 Average Loss: 0.01111149 
+    ## Epoch: 4 Average Loss: 0.003917225 
+    ## Epoch: 5 Average Loss: 0.001802825 
+    ## Epoch: 6 Average Loss: 0.0009730512 
+    ## Epoch: 7 Average Loss: 0.000579244 
+    ## Epoch: 8 Average Loss: 0.0003937229 
+    ## Epoch: 9 Average Loss: 0.0003054606 
+    ## Epoch: 10 Average Loss: 0.0002210946 
+    ## Epoch: 11 Average Loss: 0.0001796899 
+    ## Epoch: 12 Average Loss: 0.0001452636 
+    ## Epoch: 13 Average Loss: 0.000120732 
+    ## Epoch: 14 Average Loss: 0.0001155106 
+    ## Epoch: 15 Average Loss: 9.909157e-05 
+    ## Epoch: 16 Average Loss: 9.266525e-05 
+    ## Epoch: 17 Average Loss: 8.161504e-05 
+    ## Epoch: 18 Average Loss: 8.431438e-05 
+    ## Epoch: 19 Average Loss: 6.912725e-05 
+    ## Epoch: 20 Average Loss: 6.824594e-05
 
 ``` r
 rm(
@@ -416,15 +361,15 @@ enron[c(5:15, 23), c("doc_id", "relevant", "score")] |>
 ```
 
     ##                doc_id relevant     score
-    ## 1  ENR.0001.0002.0216       -1 0.5389777
-    ## 2  ENR.0001.0002.0378       -1 0.5322267
-    ## 3  ENR.0001.0003.0226       -1 0.5086093
-    ## 4  ENR.0001.0003.0238        1 0.6606168
-    ## 5  ENR.0001.0003.0243        1 0.5939678
-    ## 6  ENR.0001.0003.0432        1 0.4308110
-    ## 7  ENR.0001.0003.0436       -1 0.3576119
-    ## 8  ENR.0001.0004.0205       -1 0.5741462
-    ## 9  ENR.0001.0004.0262       -1 0.5751557
-    ## 10 ENR.0001.0005.0599       -1 0.4266498
-    ## 11 ENR.0001.0005.0629       -1 0.4786873
-    ## 12 ENR.0001.0017.0141       -1 0.5561327
+    ## 1  ENR.0001.0005.0642        1 0.5561537
+    ## 2  ENR.0001.0005.0710        1 0.5483655
+    ## 3  ENR.0001.0015.0426        1 0.7026807
+    ## 4  ENR.0001.0018.0630        1 0.4461902
+    ## 5  ENR.0001.0018.0875        1 0.6637589
+    ## 6  ENR.0001.0020.0200        1 0.5654444
+    ## 7  ENR.0001.0020.0685        1 0.6389393
+    ## 8  ENR.0001.0020.0803        1 0.2375013
+    ## 9  ENR.0001.0025.0490        1 0.8561919
+    ## 10 ENR.0001.0025.0689        1 0.5094844
+    ## 11 ENR.0001.0025.0745        1 0.5387295
+    ## 12 ENR.0001.0026.0602        1 0.4654381

@@ -1,5 +1,6 @@
 ---
 title: "\"oal\" - Occasional Active Learning"
+subtitle: "An open source implementation of e-discovery active learning"
 author: "Andre Abadi"
 date: "`r Sys.Date()`"
 output: github_document
@@ -40,7 +41,7 @@ enron <-
     select = c("doc_id", "relevant", "content") # only these columns
   ) |> 
   as_tibble() |>
-  filter(relevant != 0) # drop rows where relevant = 0
+  filter(!is.na(relevant)) # drop rows where relevant = 0
 enron$content[23] |>
   str_wrap(width = 75) |>
   cat()
@@ -85,6 +86,7 @@ enron$content[23] |>
   str_wrap(width = 75) |>
   cat()
 ```
+
 ### Message Lengths
 
 ```{r length_distro}
@@ -150,6 +152,7 @@ enron <-
 rm(na_indices)
 enron$indices[23]
 ```
+
 ## Convert to Tensors
 
 ```{r tensors}
@@ -206,12 +209,6 @@ embedding_dim <- 64  # Embedding dimension
 max_len <- tensor_data$size(2)
 n_hidden <- 64  # Number of hidden units
 #
-# training variables
-#
-batch_size <- 500  # Set your desired batch size
-optimizer <- optim_adam(nn$parameters, lr = 0.001)
-num_epochs <- 20
-#
 # model setup
 #
 model <- nn_module(
@@ -239,6 +236,12 @@ rm(
   embedding_dim,
   max_len, 
   n_hidden)
+#
+# training variables
+#
+batch_size <- 500  # Set your desired batch size
+optimizer <- optim_adam(nn$parameters, lr = 0.001)
+num_epochs <- 20
 #
 # training
 #

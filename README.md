@@ -1,7 +1,7 @@
 “oal” - Occasional Active Learning
 ================
 Andre Abadi
-2024-08-19
+2024-08-20
 
 ## Libraries
 
@@ -63,7 +63,7 @@ enron <-
     content = replace_contraction(content),
     content = stri_trans_nfc(content), # unicode normalisation
     content = str_replace_all(content, stop_words_pattern, ""),
-    content = str_squish(content) # max 1 whitespace, remove from start and end
+    content = str_squish(content) # max 1 whitespace, remove start and end
   ) |>
   filter(content != "" & !is.na(content)) # remove now-empty content rows
 rm(
@@ -76,21 +76,7 @@ enron$content[23] |>
   cat()
 ```
 
-    ## cash michelle email enron wholesale services office chairman mark frevert
-    ## chairman ceo mark haedicke managing director counsel subject confidential
-    ## information securities trading pace fluid fast changing demands equity
-    ## trading activities enron wholesale services ews recently revised official
-    ## policies procedures confidential information securities trading policies
-    ## procedures revisions reflect major developments equity trading activities
-    ## extended united kingdom effort streamline information flow process review
-    ## team play centralized role role resource required familiar comply policies
-    ## procedures newly revised policies procedures review legalonline intranet
-    ## website maintained enron wholesale services legal department click attached
-    ## link access legalonline certified compliance policies procedures calendar
-    ## certify time required review familiar revised policies procedures certified
-    ## compliance policies procedures calendar weeks receipt message legalonline
-    ## site quickly conveniently certify compliance line sap personal id questions
-    ## policies procedures call bob bruce extension donna lowry extension
+    ## review attachment final document provide starting review process
 
 ### Message Lengths
 
@@ -99,9 +85,8 @@ require(ggplot2)
 enron %>%
   mutate(content_length = nchar(content)) %>%
   ggplot(aes(x = content_length)) +
-  geom_histogram(binwidth = 500, fill = "blue", color = "black") +
-  labs(title = "Distribution of Message Lengths", x = "Message Length (characters)", y = "Frequency") +
-  theme_minimal()
+  geom_histogram(binwidth = 500,) +
+  labs(title = "Distribution of Message Lengths", x = "Message Length (characters)", y = "Frequency")
 ```
 
 <img src="README_files/figure-gfm/length_distro-1.png"  />
@@ -138,7 +123,7 @@ enron$content[23] |>
   cat()
 ```
 
-    ## cash michelle email enron wholesale services office chairman mark frevert
+    ## review attachment final document provide starting review process
 
 ## Tokenize
 
@@ -168,15 +153,17 @@ enron$indices[23]
 ```
 
     ## [[1]]
-    ##      cash  michelle     email     enron wholesale  services    office  chairman 
-    ##       361        86        75         1        46        48        27        18 
-    ##      mark   frevert 
-    ##        12        58
+    ##     review attachment      final   document    provide   starting     review 
+    ##        177        634        358         37        150       1078        177 
+    ##    process 
+    ##        193
 
 ## Convert to Tensors
 
 ``` r
 require(torch)  # for tensor operations
+set.seed(1)
+torch_manual_seed(1)
 #
 # convert to tensors
 #
@@ -218,30 +205,30 @@ enron_tensor_dataset$.getitem(23)[[1]][enron_tensor_dataset$.getitem(23)[[1]] !=
 ```
 
     ## torch_tensor
-    ##  361
-    ##   86
-    ##   75
-    ##    1
-    ##   46
-    ##   48
-    ##   27
-    ##   18
-    ##   12
-    ##   58
-    ## [ CPULongType{10} ]
+    ##   177
+    ##   634
+    ##   358
+    ##    37
+    ##   150
+    ##  1078
+    ##   177
+    ##   193
+    ## [ CPULongType{8} ]
 
 ``` r
 enron_tensor_dataset$.getitem(23)[[2]]
 ```
 
     ## torch_tensor
-    ## 1
+    ## 0
     ## [ CPULongType{} ]
 
 ### Declare Model
 
 ``` r
 require(torch)
+set.seed(1)
+torch_manual_seed(1)
 #
 # model variables
 #
@@ -312,26 +299,26 @@ for (epoch in 1:num_epochs) {
 }
 ```
 
-    ## Epoch: 1 Average Loss: 0.4284099 
-    ## Epoch: 2 Average Loss: 0.05109073 
-    ## Epoch: 3 Average Loss: 0.01111149 
-    ## Epoch: 4 Average Loss: 0.003917225 
-    ## Epoch: 5 Average Loss: 0.001802825 
-    ## Epoch: 6 Average Loss: 0.0009730512 
-    ## Epoch: 7 Average Loss: 0.000579244 
-    ## Epoch: 8 Average Loss: 0.0003937229 
-    ## Epoch: 9 Average Loss: 0.0003054606 
-    ## Epoch: 10 Average Loss: 0.0002210946 
-    ## Epoch: 11 Average Loss: 0.0001796899 
-    ## Epoch: 12 Average Loss: 0.0001452636 
-    ## Epoch: 13 Average Loss: 0.000120732 
-    ## Epoch: 14 Average Loss: 0.0001155106 
-    ## Epoch: 15 Average Loss: 9.909157e-05 
-    ## Epoch: 16 Average Loss: 9.266525e-05 
-    ## Epoch: 17 Average Loss: 8.161504e-05 
-    ## Epoch: 18 Average Loss: 8.431438e-05 
-    ## Epoch: 19 Average Loss: 6.912725e-05 
-    ## Epoch: 20 Average Loss: 6.824594e-05
+    ## Epoch: 1 Average Loss: 0.7536084 
+    ## Epoch: 2 Average Loss: 0.6971813 
+    ## Epoch: 3 Average Loss: 0.6308283 
+    ## Epoch: 4 Average Loss: 0.5601185 
+    ## Epoch: 5 Average Loss: 0.5388337 
+    ## Epoch: 6 Average Loss: 0.5363574 
+    ## Epoch: 7 Average Loss: 0.4870708 
+    ## Epoch: 8 Average Loss: 0.4772458 
+    ## Epoch: 9 Average Loss: 0.4537937 
+    ## Epoch: 10 Average Loss: 0.4220158 
+    ## Epoch: 11 Average Loss: 0.4147417 
+    ## Epoch: 12 Average Loss: 0.3889803 
+    ## Epoch: 13 Average Loss: 0.3743793 
+    ## Epoch: 14 Average Loss: 0.3453557 
+    ## Epoch: 15 Average Loss: 0.3407117 
+    ## Epoch: 16 Average Loss: 0.3172497 
+    ## Epoch: 17 Average Loss: 0.2870797 
+    ## Epoch: 18 Average Loss: 0.2746077 
+    ## Epoch: 19 Average Loss: 0.2581357 
+    ## Epoch: 20 Average Loss: 0.2439252
 
 ``` r
 rm(
@@ -346,6 +333,8 @@ rm(
 ``` r
 require(torch)
 require(tidyverse) # mutate
+set.seed(1)
+torch_manual_seed(1)
 nn$eval() # set model to evaluation mode
 with_no_grad({
   scores <- 
@@ -356,20 +345,45 @@ scores <- # create new variable
 enron <- # update original dataset
   enron |> # pipe out original dataset
   mutate(score = scores) # add new column
-enron[c(5:15, 23), c("doc_id", "relevant", "score")] |> 
+#enron[c(5:15, 23), c("doc_id", "relevant", "score")] |> as.data.frame()
+set.seed(1)
+relevant_1 <- enron |>
+  filter(relevant == 1) |>
+  sample_n(10)
+relevant_0 <- enron |>
+  filter(relevant == 0) |>
+  sample_n(10)
+sampled_enron <- 
+  bind_rows(relevant_1, relevant_0)
+sampled_enron |>
+  select(doc_id, relevant, score) |>
   as.data.frame()
 ```
 
-    ##                doc_id relevant     score
-    ## 1  ENR.0001.0005.0642        1 0.5561537
-    ## 2  ENR.0001.0005.0710        1 0.5483655
-    ## 3  ENR.0001.0015.0426        1 0.7026807
-    ## 4  ENR.0001.0018.0630        1 0.4461902
-    ## 5  ENR.0001.0018.0875        1 0.6637589
-    ## 6  ENR.0001.0020.0200        1 0.5654444
-    ## 7  ENR.0001.0020.0685        1 0.6389393
-    ## 8  ENR.0001.0020.0803        1 0.2375013
-    ## 9  ENR.0001.0025.0490        1 0.8561919
-    ## 10 ENR.0001.0025.0689        1 0.5094844
-    ## 11 ENR.0001.0025.0745        1 0.5387295
-    ## 12 ENR.0001.0026.0602        1 0.4654381
+    ##                doc_id relevant       score
+    ## 1  ENR.0001.0192.0140        1 0.048807401
+    ## 2  ENR.0001.0045.0296        1 0.705716908
+    ## 3  ENR.0001.0117.0499        1 0.759014845
+    ## 4  ENR.0001.0117.0202        1 0.949854195
+    ## 5  ENR.0001.0115.0332        1 0.076412171
+    ## 6  ENR.0001.0115.0219        1 0.301738471
+    ## 7  ENR.0001.0113.0012        1 0.097056858
+    ## 8  ENR.0001.0115.0373        1 0.007583975
+    ## 9  ENR.0001.0118.0639        1 0.752520800
+    ## 10 ENR.0001.0115.0244        1 0.286277562
+    ## 11 ENR.0001.0116.0978        0 0.610589683
+    ## 12 ENR.0001.0115.0978        0 0.150573462
+    ## 13 ENR.0001.0155.0673        0 0.005512342
+    ## 14 ENR.0001.0118.0158        0 0.200124443
+    ## 15 ENR.0001.0120.0192        0 0.976750314
+    ## 16 ENR.0001.0034.0874        0 0.030013280
+    ## 17 ENR.0001.0113.0660        0 0.292265028
+    ## 18 ENR.0001.0120.0701        0 0.672328949
+    ## 19 ENR.0001.0116.0918        0 0.761235237
+    ## 20 ENR.0001.0118.0488        0 0.615665257
+
+``` r
+rm(relevant_1,
+   relevant_0,
+   sampled_enron)
+```

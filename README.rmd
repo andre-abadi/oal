@@ -11,7 +11,7 @@ knitr::opts_chunk$set(
   echo = TRUE, # knit code (default = TRUE)
   message = FALSE, # knit messages (default = TRUE)
   warning = FALSE, # knit warnings (default = TRUE)
-  cache = TRUE, # cache knitted chunks (default = FALSE)
+  cache = FALSE, # cache knitted chunks (default = FALSE)
   fig.align = "centre", # align figures to centre
   fig.pos = "H", # hard-here-mode for plots
   out.extra = ""
@@ -74,7 +74,7 @@ enron <-
     content = replace_contraction(content),
     content = stri_trans_nfc(content), # unicode normalisation
     content = str_replace_all(content, stop_words_pattern, ""),
-    content = str_squish(content) # max 1 whitespace, remove from start and end
+    content = str_squish(content) # max 1 whitespace, remove start and end
   ) |>
   filter(content != "" & !is.na(content)) # remove now-empty content rows
 rm(
@@ -94,9 +94,8 @@ require(ggplot2)
 enron %>%
   mutate(content_length = nchar(content)) %>%
   ggplot(aes(x = content_length)) +
-  geom_histogram(binwidth = 500, fill = "blue", color = "black") +
-  labs(title = "Distribution of Message Lengths", x = "Message Length (characters)", y = "Frequency") +
-  theme_minimal()
+  geom_histogram(binwidth = 500,) +
+  labs(title = "Distribution of Message Lengths", x = "Message Length (characters)", y = "Frequency")
 enron |>
   mutate(content_length = nchar(content)) |>
   summarize(max_length = max(content_length)) |> as.numeric()
@@ -157,6 +156,8 @@ enron$indices[23]
 
 ```{r tensors}
 require(torch)  # for tensor operations
+set.seed(1)
+torch_manual_seed(1)
 #
 # convert to tensors
 #
@@ -202,6 +203,8 @@ enron_tensor_dataset$.getitem(23)[[2]]
 
 ```{r declare_model}
 require(torch)
+set.seed(1)
+torch_manual_seed(1)
 #
 # model variables
 #
@@ -282,6 +285,8 @@ rm(
 ```{r predict}
 require(torch)
 require(tidyverse) # mutate
+set.seed(1)
+torch_manual_seed(1)
 nn$eval() # set model to evaluation mode
 with_no_grad({
   scores <- 
@@ -292,6 +297,20 @@ scores <- # create new variable
 enron <- # update original dataset
   enron |> # pipe out original dataset
   mutate(score = scores) # add new column
-enron[c(5:15, 23), c("doc_id", "relevant", "score")] |> 
+#enron[c(5:15, 23), c("doc_id", "relevant", "score")] |> as.data.frame()
+set.seed(1)
+relevant_1 <- enron |>
+  filter(relevant == 1) |>
+  sample_n(10)
+relevant_0 <- enron |>
+  filter(relevant == 0) |>
+  sample_n(10)
+sampled_enron <- 
+  bind_rows(relevant_1, relevant_0)
+sampled_enron |>
+  select(doc_id, relevant, score) |>
   as.data.frame()
+rm(relevant_1,
+   relevant_0,
+   sampled_enron)
 ```

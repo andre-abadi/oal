@@ -93,9 +93,13 @@ enron$content[23] |>
 require(ggplot2)
 enron %>%
   mutate(content_length = nchar(content)) %>%
-  ggplot(aes(x = content_length)) +
-  geom_histogram(binwidth = 500,) +
-  labs(title = "Distribution of Message Lengths", x = "Message Length (characters)", y = "Frequency")
+  ggplot(aes(x = content_length, fill = ..count..)) +
+  geom_histogram(binwidth = 2000,) +
+  #scale_x_log10() +
+  scale_fill_viridis_c(option = "viridis") +
+  labs(title = "Distribution of Message Lengths", 
+       x = "Message Length (characters)", 
+       y = "Frequency")
 enron |>
   mutate(content_length = nchar(content)) |>
   summarize(max_length = max(content_length)) |> as.numeric()
@@ -313,4 +317,17 @@ sampled_enron |>
 rm(relevant_1,
    relevant_0,
    sampled_enron)
+```
+
+## Result Distribution
+```{r result_distribution}
+require(ggplot2) # for plotting
+require(tidyverse) # for data manipulation
+require(viridis)
+ggplot(enron, aes(x = score, fill = ..count..)) +
+  geom_histogram(binwidth = 0.01) +
+  labs(title = "Histogram of Scores",
+       x = "Score",
+       y = "Frequency") +
+  scale_fill_viridis_c()
 ```

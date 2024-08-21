@@ -103,9 +103,9 @@ enron %>%
        x = "Message Length (characters)", 
        y = "Frequency")
 # excerpt
-enron |>
-  mutate(content_length = nchar(content)) |>
-  summarize(max_length = max(content_length)) |> as.numeric()
+#enron |>
+#  mutate(content_length = nchar(content)) |>
+#  summarize(max_length = max(content_length)) |> as.numeric()
 ```
 
 ### Truncate
@@ -256,137 +256,146 @@ enron_tensor_dataset_test <-
 # exerpt
 row_index <-
   which(enron_train$doc_id == "ENR.0001.0017.0141")
-enron_tensor_dataset_train$.getitem(row_index)[[1]][enron_tensor_dataset_train$.getitem(23)[[1]] != length(vocab) + 1]
+enron_tensor_dataset_train$.getitem(row_index)[[1]][enron_tensor_dataset_train$.getitem(row_index)[[1]] != length(vocab) + 1]
+rm(row_index)
 #enron_tensor_dataset_train$.getitem(row_index)[[2]]
 ```
 
 ### Declare Model
 
-```{r neural_network}
-require(torch)
-require(tidyverse)
-set.seed(1)
-torch_manual_seed(1)
-#
-# model variables
-#
-embedding_dim <- 32  # Embedding dimension
-max_len <- tensor_data_train$size(2)
-n_hidden <- 32  # Number of hidden units
-#
-# model setup
-#
-model <- nn_module(
-  initialize = function(embed_dim, n_hidden, max_len) {
-    self$embedding <- nn_embedding(
-      length(vocab) + 2, 
-      embed_dim, 
-      padding_idx = length(vocab) + 1)
-    self$hidden <- nn_linear(embed_dim * max_len, n_hidden)
-    self$dropout <- nn_dropout(p = 0.5)  # drop out with p probability
-    self$output <- nn_linear(n_hidden, 1)
-    self$sigmoid <- nn_sigmoid()
-  },
-  forward = function(x) {
-    x <- self$embedding(x)  # embedding lookup
-    x <- torch_flatten(x, start_dim = 2)  # flatten embeddings
-    x <- self$hidden(x)  # Pass through the hidden layer
-    x <- self$dropout(x)  # apply dropout
-    x <- self$output(x)  # Pass through the output layer
-    x <- self$sigmoid(x)  # Apply sigmoid to get probabilities
-    return(x)
+```{r nn_function}
+predict <- function(embedding_dim, 
+                    n_hidden, 
+                    batch_size,
+                    learn_rate,
+                    num_epochs) {
+  require(torch)
+  require(tidyverse)
+  set.seed(1)
+  torch_manual_seed(1)
+  #
+  # model variables
+  #
+  max_len <- tensor_data_train$size(2)
+  #
+  # model setup
+  #
+  model <- nn_module(
+    initialize = function(embed_dim, n_hidden, max_len) {
+      self$embedding <- nn_embedding(
+        length(vocab) + 2, 
+        embed_dim, 
+        padding_idx = length(vocab) + 1)
+      self$hidden <- nn_linear(embed_dim * max_len, n_hidden)
+      self$dropout <- nn_dropout(p = 0.5)  # drop out with p probability
+      self$output <- nn_linear(n_hidden, 1)
+      self$sigmoid <- nn_sigmoid()
+    },
+    forward = function(x) {
+      x <- self$embedding(x)  # embedding lookup
+      x <- torch_flatten(x, start_dim = 2)  # flatten embeddings
+      x <- self$hidden(x)  # Pass through the hidden layer
+      x <- self$dropout(x)  # apply dropout
+      x <- self$output(x)  # Pass through the output layer
+      x <- self$sigmoid(x)  # Apply sigmoid to get probabilities
+      return(x)
+    }
+  )
+  #
+  # instantiate
+  #
+  nn <- model(embedding_dim, n_hidden, max_len)
+  rm(
+    model, 
+    embedding_dim,
+    max_len, 
+    n_hidden)
+  #
+  # dataloader
+  #
+  dataloader_train <- dataloader(
+    dataset = enron_tensor_dataset_train,  # Your custom dataset
+    batch_size = batch_size,         # The batch size you want to use
+    shuffle = TRUE                   # Whether to shuffle the data
+  )
+  dataloader_test <- dataloader(
+    dataset = enron_tensor_dataset_test,  # Your custom dataset
+    batch_size = batch_size,         # The batch size you want to use
+    shuffle = TRUE                   # Whether to shuffle the data
+  )
+  #
+  # training
+  #
+  optimizer <- optim_adam(nn$parameters, lr = learn_rate)
+  criterion <- nn_bce_loss()
+  for (epoch in 1:num_epochs) {
+    total_loss <- 0
+    coro::loop(for (batch in dataloader_train) {
+      batch_data <- 
+        batch[[1]]$to(dtype = torch_int64()) + 
+        torch_tensor(1, dtype = torch_int64())
+      batch_labels <- batch[[2]]$to(dtype = torch_float32())
+      optimizer$zero_grad()  # reset gradients
+      output <- nn(batch_data) # forward pass
+      loss <- criterion(output, batch_labels) # compute loss
+      loss$backward() # backward pass and optimize
+      optimizer$step()
+      total_loss <- total_loss + loss$item()
+    })
+    cat("Epoch:", 
+        epoch, 
+        "Average Loss:", 
+        total_loss / length(dataloader_train), 
+        "\n")
   }
-)
-nn <- model(embedding_dim, n_hidden, max_len)
-rm(
-  model, 
-  embedding_dim,
-  max_len, 
-  n_hidden)
-#
-# training variables
-#
-batch_size <- 500
-optimizer <- optim_adam(nn$parameters, lr = 0.001)
-num_epochs <- 20
-#
-# data loader
-#
-dataloader_train <- dataloader(
-  dataset = enron_tensor_dataset_train,  # Your custom dataset
-  batch_size = batch_size,         # The batch size you want to use
-  shuffle = TRUE                   # Whether to shuffle the data
-)
-dataloader_test <- dataloader(
-  dataset = enron_tensor_dataset_test,  # Your custom dataset
-  batch_size = batch_size,         # The batch size you want to use
-  shuffle = TRUE                   # Whether to shuffle the data
-)
-#
-# training
-#
-criterion <- nn_bce_loss()
-for (epoch in 1:num_epochs) {
-  total_loss <- 0
-  coro::loop(for (batch in dataloader_train) {
-    batch_data <- 
-      batch[[1]]$to(dtype = torch_int64()) + 
-      torch_tensor(1, dtype = torch_int64())
-    batch_labels <- batch[[2]]$to(dtype = torch_float32())
-    optimizer$zero_grad()  # reset gradients
-    output <- nn(batch_data) # forward pass
-    loss <- criterion(output, batch_labels) # compute loss
-    loss$backward() # backward pass and optimize
-    optimizer$step()
-    total_loss <- total_loss + loss$item() # accumulate loss for monitoring
+  nn$eval() # set model to evaluation mode
+  with_no_grad({ # no need to compute gradients in eval mode
+    train_scores <- 
+      nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
   })
-  cat("Epoch:", 
-      epoch, 
-      "Average Loss:", 
-      total_loss / length(dataloader_train), 
-      "\n")
+  train_scores <- # create new variable
+    as_array(train_scores) # convert scores tensor to r vector
+  enron_train <- # update original dataset
+    enron_train |> # pipe out original dataset
+    mutate(score = train_scores) # add new column
+  with_no_grad({ # no need to compute gradients in eval mode
+    train_scores <- 
+      nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
+  })
+  train_scores <- # create new variable
+    as_array(train_scores) # convert scores tensor to r vector
+  enron_train <- # update original dataset
+    enron_train |> # pipe out original dataset
+    mutate(score = train_scores) # add new column
+  with_no_grad({
+    test_scores <- 
+      nn(tensor_data_test)$squeeze() # fwd pass, remove singleton dims
+  })
+  test_scores <- # create new variable
+    as_array(test_scores) # convert scores tensor to r vector
+  enron_test <- # update original dataset
+    enron_test |> # pipe out original dataset
+    mutate(score = test_scores) # add new column
+  rm(
+    criterion, 
+    optimizer, 
+    num_epochs, 
+    epoch,
+    train_scores,
+    test_scores)
+  accuracy <- enron_test |>
+    mutate(
+      correct = (score > 0.5 & relevant == 1) | 
+        (score <= 0.5 & relevant == 0)) |>
+    summarize(correct_percentage = mean(correct) * 100) |>
+    as.numeric()
+  return(accuracy)
 }
-nn$eval() # set model to evaluation mode
-with_no_grad({
-  train_scores <- 
-    nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
-})
-train_scores <- # create new variable
-  as_array(train_scores) # convert scores tensor to r vector
-enron_train <- # update original dataset
-  enron_train |> # pipe out original dataset
-  mutate(score = train_scores) # add new column
-with_no_grad({
-  train_scores <- 
-    nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
-})
-train_scores <- # create new variable
-  as_array(train_scores) # convert scores tensor to r vector
-enron_train <- # update original dataset
-  enron_train |> # pipe out original dataset
-  mutate(score = train_scores) # add new column
-with_no_grad({
-  test_scores <- 
-    nn(tensor_data_test)$squeeze() # fwd pass, remove singleton dims
-})
-test_scores <- # create new variable
-  as_array(test_scores) # convert scores tensor to r vector
-enron_test <- # update original dataset
-  enron_test |> # pipe out original dataset
-  mutate(score = test_scores) # add new column
-rm(
-  criterion, 
-  optimizer, 
-  num_epochs, 
-  epoch,
-  train_scores,
-  test_scores)
-enron_test |>
-  mutate(
-    correct = (score > 0.5 & relevant == 1) | 
-      (score <= 0.5 & relevant == 0)) |>
-  summarize(correct_percentage = mean(correct) * 100) |>
-  as.numeric()
+predict(embedding_dim = 64, # best 64
+        n_hidden = 64, # best 64
+        batch_size = 500, # best 500
+        learn_rate = 0.001, # best 0.001
+        num_epochs = 10) # best 10
 ```
 
 
@@ -409,10 +418,10 @@ ggplot(enron_test, aes(x = score, fill = ..count..)) +
 # exerpt
 relevant_1 <- enron_test |>
   filter(relevant == 1) |>
-  sample_n(10)
+  sample_n(5)
 relevant_0 <- enron_test |>
   filter(relevant == 0) |>
-  sample_n(10)
+  sample_n(5)
 sampled_enron <- 
   bind_rows(relevant_1, relevant_0)
 sampled_enron |>
@@ -428,17 +437,4 @@ rm(relevant_1,
 
 Encapsulate the neural network training and prediction in a function call for ease of tuning.
 
-```{r nn_function}
-predict <- function(embedding_dim, 
-                    n_hidden, 
-                    batch_size,
-                    learn_rate,
-                    num_epochs) {
-  return(50)
-}
-predict(embedding_dim = 64,
-        n_hidden = 64,
-        batch_size = 500,
-        learn_rate = 0.001,
-        num_epochs = 20)
-```
+

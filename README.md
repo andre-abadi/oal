@@ -1,7 +1,7 @@
 “oal” - Occasional Active Learning
 ================
 Andre Abadi
-2024-08-20
+2024-08-21
 
 ## Libraries
 
@@ -21,12 +21,13 @@ library(data.table) # fread
 require(data.table) # fread
 require(tidyverse) # as_tibble
 enron <-
-  fread( # tidyverse
+  fread(
     "data/enron_edisco.csv", # file to read
     select = c("doc_id", "relevant", "content") # only these columns
   ) |> 
-  as_tibble() |>
-  filter(!is.na(relevant)) # drop rows where relevant = 0
+  as_tibble() |> # tidyverse
+  filter(!is.na(relevant)) # drop rows where relevant = NA
+# excerpt
 enron$content[23] |>
   str_wrap(width = 75) |>
   cat()
@@ -71,6 +72,7 @@ rm(
   combined_regex,
   stop_words_pattern
 )
+# excerpt
 enron$content[23] |>
   str_wrap(width = 75) |>
   cat()
@@ -96,6 +98,7 @@ enron %>%
 <img src="README_files/figure-gfm/length_distro-1.png"  />
 
 ``` r
+# excerpt
 enron |>
   mutate(content_length = nchar(content)) |>
   summarize(max_length = max(content_length)) |> as.numeric()
@@ -107,7 +110,7 @@ enron |>
 
 ``` r
 require(tidyverse) # mutate
-truncate_content <- function(content, max_length = 80) {
+truncate_content <- function(content, max_length = 1000) {
   if (nchar(content) > max_length) {
     truncated <- substr(content, 1, max_length)
     last_space <- max(gregexpr(" ", truncated)[[1]])
@@ -122,6 +125,7 @@ truncate_content <- function(content, max_length = 80) {
 enron <- enron |> 
   mutate(content = sapply(content, truncate_content))
 rm(truncate_content)
+# excerpt
 enron$content[23] |>
   str_wrap(width = 75) |>
   cat()
@@ -129,38 +133,73 @@ enron$content[23] |>
 
     ## review attachment final document provide starting review process
 
+## Training/Testing Split
+
+``` r
+require(tidyverse)
+set.seed(1)
+train_ratio <- 0.8
+enron <- enron %>%
+  mutate(set = ifelse(runif(n()) < train_ratio, "train", "test"))
+enron_train <- 
+  enron %>% 
+  filter(set == "train") %>% 
+  select(-set)
+enron_test  <- 
+  enron %>% 
+  filter(set == "test") %>% 
+  select(-set)
+#enron_train %>%
+#  count(relevant) %>%
+#  mutate(percentage = n / sum(n) * 100)
+#enron_test %>%
+#  count(relevant) %>%
+#  mutate(percentage = n / sum(n) * 100)
+rm(train_ratio
+)
+```
+
 ## Tokenize
 
 ``` r
 require(tidyverse)
-enron <- 
-  enron |> 
+enron_train <- 
+  enron_train |> 
   mutate(tokens = str_split(content, "\\s+")) # create vector of all words
 vocab <- 
-  enron$tokens |> 
+  enron_train$tokens |> 
   unlist() |> 
   table() |> 
   sort(decreasing = TRUE) |> 
   names()
 word_to_index <- 
   setNames(seq_along(vocab), vocab)
-enron <- enron |> 
+enron_train <- enron_train |> 
   mutate(
     indices = map(tokens, ~ word_to_index[.x]),
     tokens = NULL)
-rm(word_to_index)
-na_indices <- sapply(enron$indices, function(x) any(is.na(x)))
-enron <-
-  enron[!na_indices, ]
+na_indices <- 
+  sapply(enron_train$indices, 
+         function(x) any(is.na(x)))
+enron_train <-
+  enron_train[!na_indices, ]
+enron_test <- 
+  enron_test |> 
+  mutate(tokens = str_split(content, "\\s+")) |> # tokenize
+  mutate(indices = map(tokens, ~ word_to_index[.x]), tokens = NULL)
+na_indices <- sapply(enron_test$indices, function(x) any(is.na(x)))
+enron_test <- enron_test[!na_indices, ]
 rm(na_indices)
-enron$indices[23]
+rm(word_to_index)
+# exerpt
+enron_train |> filter(doc_id == "ENR.0001.0017.0141") |> pull(indices)
 ```
 
     ## [[1]]
     ##     review attachment      final   document    provide   starting     review 
-    ##        177        634        358         37        150       1078        177 
+    ##         50       1350        259        110        103       1117         50 
     ##    process 
-    ##        193
+    ##        117
 
 ## Convert to Tensors
 
@@ -172,20 +211,33 @@ torch_manual_seed(1)
 # convert to tensors
 #
 pad <- length(vocab) + 1
-indices_tensors <- 
-  lapply(enron$indices, 
+indices_tensors_train <- 
+  lapply(enron_train$indices, 
          torch_tensor, 
          dtype = torch_int64())
-tensor_data <- 
-  nn_utils_rnn_pad_sequence(indices_tensors, 
+tensor_data_train <- 
+  nn_utils_rnn_pad_sequence(indices_tensors_train, 
                             batch_first = TRUE,
                             padding_value = pad)
-tensor_labels <- 
+tensor_labels_train <- 
   torch_tensor(ifelse(enron$relevant == -1, 0, enron$relevant), 
                dtype = torch_int64())
+indices_tensors_test <- 
+  lapply(enron_test$indices, 
+         torch_tensor, 
+         dtype = torch_int64())
+tensor_data_test <- 
+  nn_utils_rnn_pad_sequence(indices_tensors_test, 
+                            batch_first = TRUE,
+                            padding_value = pad)
+tensor_labels_test <- 
+  torch_tensor(ifelse(enron_test$relevant == -1, 0, enron_test$relevant), 
+               dtype = torch_int64())
 rm(
-  indices_tensors,
-  pad)
+  indices_tensors_train,
+  indices_tensors_test,
+  pad
+)
 #
 # custom class and use it
 #
@@ -203,42 +255,67 @@ custom_class <- dataset(
     return(self$tensors$size(1))
   }
 )
-enron_tensor_dataset <- 
-  custom_class(tensor_data, tensor_labels)
-enron_tensor_dataset$.getitem(23)[[1]][enron_tensor_dataset$.getitem(23)[[1]] != length(vocab) + 1]
+enron_tensor_dataset_train <- 
+  custom_class(tensor_data_train, tensor_labels_train)
+enron_tensor_dataset_test <- 
+  custom_class(tensor_data_test, tensor_labels_test)
+# exerpt
+row_index <-
+  which(enron_train$doc_id == "ENR.0001.0017.0141")
+enron_tensor_dataset_train$.getitem(row_index)[[1]][enron_tensor_dataset_train$.getitem(23)[[1]] != length(vocab) + 1]
 ```
 
     ## torch_tensor
-    ##   177
-    ##   634
-    ##   358
-    ##    37
-    ##   150
-    ##  1078
-    ##   177
-    ##   193
-    ## [ CPULongType{8} ]
+    ##     50
+    ##   1350
+    ##    259
+    ##    110
+    ##    103
+    ##   1117
+    ##     50
+    ##    117
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ##  11774
+    ## ... [the output was truncated (use n=-1 to disable)]
+    ## [ CPULongType{102} ]
 
 ``` r
-enron_tensor_dataset$.getitem(23)[[2]]
+#enron_tensor_dataset_train$.getitem(row_index)[[2]]
 ```
-
-    ## torch_tensor
-    ## 0
-    ## [ CPULongType{} ]
 
 ### Declare Model
 
 ``` r
 require(torch)
+require(tidyverse)
 set.seed(1)
 torch_manual_seed(1)
 #
 # model variables
 #
-embedding_dim <- 64  # Embedding dimension
-max_len <- tensor_data$size(2)
-n_hidden <- 64  # Number of hidden units
+embedding_dim <- 32  # Embedding dimension
+max_len <- tensor_data_train$size(2)
+n_hidden <- 32  # Number of hidden units
 #
 # model setup
 #
@@ -249,6 +326,7 @@ model <- nn_module(
       embed_dim, 
       padding_idx = length(vocab) + 1)
     self$hidden <- nn_linear(embed_dim * max_len, n_hidden)
+    self$dropout <- nn_dropout(p = 0.5)  # drop out with p probability
     self$output <- nn_linear(n_hidden, 1)
     self$sigmoid <- nn_sigmoid()
   },
@@ -256,6 +334,7 @@ model <- nn_module(
     x <- self$embedding(x)  # embedding lookup
     x <- torch_flatten(x, start_dim = 2)  # flatten embeddings
     x <- self$hidden(x)  # Pass through the hidden layer
+    x <- self$dropout(x)  # apply dropout
     x <- self$output(x)  # Pass through the output layer
     x <- self$sigmoid(x)  # Apply sigmoid to get probabilities
     return(x)
@@ -270,91 +349,139 @@ rm(
 #
 # training variables
 #
-batch_size <- 500  # Set your desired batch size
+batch_size <- 500
 optimizer <- optim_adam(nn$parameters, lr = 0.001)
 num_epochs <- 20
 #
-# training
+# data loader
 #
-dataloader <- dataloader(
-  dataset = enron_tensor_dataset,  # Your custom dataset
+dataloader_train <- dataloader(
+  dataset = enron_tensor_dataset_train,  # Your custom dataset
   batch_size = batch_size,         # The batch size you want to use
   shuffle = TRUE                   # Whether to shuffle the data
 )
+dataloader_test <- dataloader(
+  dataset = enron_tensor_dataset_test,  # Your custom dataset
+  batch_size = batch_size,         # The batch size you want to use
+  shuffle = TRUE                   # Whether to shuffle the data
+)
+#
+# training
+#
 criterion <- nn_bce_loss()
 for (epoch in 1:num_epochs) {
   total_loss <- 0
-  coro::loop(for (batch in dataloader) {
+  coro::loop(for (batch in dataloader_train) {
     batch_data <- 
-      batch[[1]]$to(dtype = torch_int64()) + torch_tensor(1, dtype = torch_int64())
+      batch[[1]]$to(dtype = torch_int64()) + 
+      torch_tensor(1, dtype = torch_int64())
     batch_labels <- batch[[2]]$to(dtype = torch_float32())
-    optimizer$zero_grad()  # Reset gradients
-    output <- nn(batch_data) # Forward pass
-    loss <- criterion(output, batch_labels) # Compute loss
-    loss$backward() # Backward pass and optimize
+    optimizer$zero_grad()  # reset gradients
+    output <- nn(batch_data) # forward pass
+    loss <- criterion(output, batch_labels) # compute loss
+    loss$backward() # backward pass and optimize
     optimizer$step()
-    total_loss <- total_loss + loss$item() # Accumulate loss for monitoring
+    total_loss <- total_loss + loss$item() # accumulate loss for monitoring
   })
   cat("Epoch:", 
       epoch, 
       "Average Loss:", 
-      total_loss / length(dataloader), 
+      total_loss / length(dataloader_train), 
       "\n")
 }
 ```
 
-    ## Epoch: 1 Average Loss: 0.7536084 
-    ## Epoch: 2 Average Loss: 0.6971813 
-    ## Epoch: 3 Average Loss: 0.6308283 
-    ## Epoch: 4 Average Loss: 0.5601185 
-    ## Epoch: 5 Average Loss: 0.5388337 
-    ## Epoch: 6 Average Loss: 0.5363574 
-    ## Epoch: 7 Average Loss: 0.4870708 
-    ## Epoch: 8 Average Loss: 0.4772458 
-    ## Epoch: 9 Average Loss: 0.4537937 
-    ## Epoch: 10 Average Loss: 0.4220158 
-    ## Epoch: 11 Average Loss: 0.4147417 
-    ## Epoch: 12 Average Loss: 0.3889803 
-    ## Epoch: 13 Average Loss: 0.3743793 
-    ## Epoch: 14 Average Loss: 0.3453557 
-    ## Epoch: 15 Average Loss: 0.3407117 
-    ## Epoch: 16 Average Loss: 0.3172497 
-    ## Epoch: 17 Average Loss: 0.2870797 
-    ## Epoch: 18 Average Loss: 0.2746077 
-    ## Epoch: 19 Average Loss: 0.2581357 
-    ## Epoch: 20 Average Loss: 0.2439252
+    ## Epoch: 1 Average Loss: 1.281696 
+    ## Epoch: 2 Average Loss: 1.290685 
+    ## Epoch: 3 Average Loss: 1.057882 
+    ## Epoch: 4 Average Loss: 0.8255272 
+    ## Epoch: 5 Average Loss: 0.6022261 
+    ## Epoch: 6 Average Loss: 0.6175299 
+    ## Epoch: 7 Average Loss: 0.6096246 
+    ## Epoch: 8 Average Loss: 0.5145197 
+    ## Epoch: 9 Average Loss: 0.4515073 
+    ## Epoch: 10 Average Loss: 0.4429001 
+    ## Epoch: 11 Average Loss: 0.3975128 
+    ## Epoch: 12 Average Loss: 0.3718781 
+    ## Epoch: 13 Average Loss: 0.3488004 
+    ## Epoch: 14 Average Loss: 0.336427 
+    ## Epoch: 15 Average Loss: 0.3272066 
+    ## Epoch: 16 Average Loss: 0.2950471 
+    ## Epoch: 17 Average Loss: 0.2958529 
+    ## Epoch: 18 Average Loss: 0.2750439 
+    ## Epoch: 19 Average Loss: 0.2609306 
+    ## Epoch: 20 Average Loss: 0.2466744
 
 ``` r
+nn$eval() # set model to evaluation mode
+with_no_grad({
+  train_scores <- 
+    nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
+})
+train_scores <- # create new variable
+  as_array(train_scores) # convert scores tensor to r vector
+enron_train <- # update original dataset
+  enron_train |> # pipe out original dataset
+  mutate(score = train_scores) # add new column
+with_no_grad({
+  train_scores <- 
+    nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
+})
+train_scores <- # create new variable
+  as_array(train_scores) # convert scores tensor to r vector
+enron_train <- # update original dataset
+  enron_train |> # pipe out original dataset
+  mutate(score = train_scores) # add new column
+with_no_grad({
+  test_scores <- 
+    nn(tensor_data_test)$squeeze() # fwd pass, remove singleton dims
+})
+test_scores <- # create new variable
+  as_array(test_scores) # convert scores tensor to r vector
+enron_test <- # update original dataset
+  enron_test |> # pipe out original dataset
+  mutate(score = test_scores) # add new column
 rm(
   criterion, 
   optimizer, 
   num_epochs, 
-  epoch)
+  epoch,
+  train_scores,
+  test_scores)
+enron_test |>
+  mutate(
+    correct = (score > 0.5 & relevant == 1) | 
+      (score <= 0.5 & relevant == 0)) |>
+  summarize(correct_percentage = mean(correct) * 100) |>
+  as.numeric()
 ```
 
-### Predict
+    ## [1] 46.61017
+
+## Result Distribution
 
 ``` r
-require(torch)
-require(tidyverse) # mutate
-set.seed(1)
-torch_manual_seed(1)
-nn$eval() # set model to evaluation mode
-with_no_grad({
-  scores <- 
-    nn(tensor_data)$squeeze() # fwd pass, remove singleton dims
-})
-scores <- # create new variable
-  as_array(scores) # convert scores tensor to r vector
-enron <- # update original dataset
-  enron |> # pipe out original dataset
-  mutate(score = scores) # add new column
-#enron[c(5:15, 23), c("doc_id", "relevant", "score")] |> as.data.frame()
-set.seed(1)
-relevant_1 <- enron |>
+require(ggplot2) # for plotting
+require(tidyverse) # for data manipulation
+require(viridis)
+ggplot(enron_test, aes(x = score, fill = ..count..)) +
+  geom_histogram(binwidth = 0.05) +
+  labs(title = "Histogram of Scores",
+       x = "Score",
+       y = "Frequency") +
+  scale_fill_viridis_c()
+```
+
+<img src="README_files/figure-gfm/result_distribution-1.png"  />
+
+### Result Sample
+
+``` r
+# exerpt
+relevant_1 <- enron_test |>
   filter(relevant == 1) |>
   sample_n(10)
-relevant_0 <- enron |>
+relevant_0 <- enron_test |>
   filter(relevant == 0) |>
   sample_n(10)
 sampled_enron <- 
@@ -364,27 +491,27 @@ sampled_enron |>
   as.data.frame()
 ```
 
-    ##                doc_id relevant       score
-    ## 1  ENR.0001.0192.0140        1 0.048807401
-    ## 2  ENR.0001.0045.0296        1 0.705716908
-    ## 3  ENR.0001.0117.0499        1 0.759014845
-    ## 4  ENR.0001.0117.0202        1 0.949854195
-    ## 5  ENR.0001.0115.0332        1 0.076412171
-    ## 6  ENR.0001.0115.0219        1 0.301738471
-    ## 7  ENR.0001.0113.0012        1 0.097056858
-    ## 8  ENR.0001.0115.0373        1 0.007583975
-    ## 9  ENR.0001.0118.0639        1 0.752520800
-    ## 10 ENR.0001.0115.0244        1 0.286277562
-    ## 11 ENR.0001.0116.0978        0 0.610589683
-    ## 12 ENR.0001.0115.0978        0 0.150573462
-    ## 13 ENR.0001.0155.0673        0 0.005512342
-    ## 14 ENR.0001.0118.0158        0 0.200124443
-    ## 15 ENR.0001.0120.0192        0 0.976750314
-    ## 16 ENR.0001.0034.0874        0 0.030013280
-    ## 17 ENR.0001.0113.0660        0 0.292265028
-    ## 18 ENR.0001.0120.0701        0 0.672328949
-    ## 19 ENR.0001.0116.0918        0 0.761235237
-    ## 20 ENR.0001.0118.0488        0 0.615665257
+    ##                doc_id relevant     score
+    ## 1  ENR.0001.0045.0984        1 0.2733521
+    ## 2  ENR.0001.0217.0701        1 0.1813560
+    ## 3  ENR.0001.0037.0631        1 0.3923280
+    ## 4  ENR.0001.0177.0856        1 0.2400435
+    ## 5  ENR.0001.0118.0483        1 0.1188278
+    ## 6  ENR.0001.0116.0506        1 0.6233805
+    ## 7  ENR.0001.0118.0304        1 0.2420841
+    ## 8  ENR.0001.0177.0740        1 0.7098238
+    ## 9  ENR.0001.0118.0408        1 0.1180888
+    ## 10 ENR.0001.0194.0850        1 0.5128819
+    ## 11 ENR.0001.0118.0216        0 0.4568646
+    ## 12 ENR.0001.0113.0677        0 0.4061086
+    ## 13 ENR.0001.0116.0747        0 0.7990165
+    ## 14 ENR.0001.0158.0254        0 0.4958428
+    ## 15 ENR.0001.0116.0638        0 0.7752228
+    ## 16 ENR.0001.0117.0093        0 0.8625825
+    ## 17 ENR.0001.0116.0616        0 0.6347539
+    ## 18 ENR.0001.0116.0660        0 0.4728081
+    ## 19 ENR.0001.0117.0054        0 0.8037809
+    ## 20 ENR.0001.0116.0768        0 0.4720142
 
 ``` r
 rm(relevant_1,
@@ -392,18 +519,24 @@ rm(relevant_1,
    sampled_enron)
 ```
 
-## Result Distribution
+## NN Function
+
+Encapsulate the neural network training and prediction in a function
+call for ease of tuning.
 
 ``` r
-require(ggplot2) # for plotting
-require(tidyverse) # for data manipulation
-require(viridis)
-ggplot(enron, aes(x = score, fill = ..count..)) +
-  geom_histogram(binwidth = 0.01) +
-  labs(title = "Histogram of Scores",
-       x = "Score",
-       y = "Frequency") +
-  scale_fill_viridis_c()
+predict <- function(embedding_dim, 
+                    n_hidden, 
+                    batch_size,
+                    learn_rate,
+                    num_epochs) {
+  return(50)
+}
+predict(embedding_dim = 64,
+        n_hidden = 64,
+        batch_size = 500,
+        learn_rate = 0.001,
+        num_epochs = 20)
 ```
 
-<img src="README_files/figure-gfm/result_distribution-1.png"  />
+    ## [1] 50

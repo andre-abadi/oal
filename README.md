@@ -1,7 +1,7 @@
 “oal” - Occasional Active Learning
 ================
 Andre Abadi
-2024-08-21
+2024-08-22
 
 ## Libraries
 
@@ -87,24 +87,23 @@ require(ggplot2)
 enron %>%
   mutate(content_length = nchar(content)) %>%
   ggplot(aes(x = content_length, fill = ..count..)) +
-  geom_histogram(binwidth = 2000,) +
+  geom_histogram(binwidth = 0.5,) +
   #scale_x_log10() +
-  scale_fill_viridis_c(option = "viridis") +
+  scale_fill_viridis_c(option = "viridis", end = 0.8) +
   labs(title = "Distribution of Message Lengths", 
        x = "Message Length (characters)", 
-       y = "Frequency")
+       y = "Frequency") +
+  scale_x_continuous(trans='log')
 ```
 
 <img src="README_files/figure-gfm/length_distro-1.png"  />
 
 ``` r
 # excerpt
-enron |>
-  mutate(content_length = nchar(content)) |>
-  summarize(max_length = max(content_length)) |> as.numeric()
+#enron |>
+#  mutate(content_length = nchar(content)) |>
+#  summarize(max_length = max(content_length)) |> as.numeric()
 ```
-
-    ## [1] 135148
 
 ### Truncate
 
@@ -262,201 +261,174 @@ enron_tensor_dataset_test <-
 # exerpt
 row_index <-
   which(enron_train$doc_id == "ENR.0001.0017.0141")
-enron_tensor_dataset_train$.getitem(row_index)[[1]][enron_tensor_dataset_train$.getitem(23)[[1]] != length(vocab) + 1]
+enron_tensor_dataset_train$.getitem(row_index)[[1]][enron_tensor_dataset_train$.getitem(row_index)[[1]] != length(vocab) + 1]
 ```
 
     ## torch_tensor
-    ##     50
-    ##   1350
-    ##    259
-    ##    110
-    ##    103
-    ##   1117
-    ##     50
-    ##    117
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ##  11774
-    ## ... [the output was truncated (use n=-1 to disable)]
-    ## [ CPULongType{102} ]
+    ##    50
+    ##  1350
+    ##   259
+    ##   110
+    ##   103
+    ##  1117
+    ##    50
+    ##   117
+    ## [ CPULongType{8} ]
 
 ``` r
+rm(row_index)
 #enron_tensor_dataset_train$.getitem(row_index)[[2]]
 ```
 
 ### Declare Model
 
 ``` r
-require(torch)
-require(tidyverse)
-set.seed(1)
-torch_manual_seed(1)
-#
-# model variables
-#
-embedding_dim <- 32  # Embedding dimension
-max_len <- tensor_data_train$size(2)
-n_hidden <- 32  # Number of hidden units
-#
-# model setup
-#
-model <- nn_module(
-  initialize = function(embed_dim, n_hidden, max_len) {
-    self$embedding <- nn_embedding(
-      length(vocab) + 2, 
-      embed_dim, 
-      padding_idx = length(vocab) + 1)
-    self$hidden <- nn_linear(embed_dim * max_len, n_hidden)
-    self$dropout <- nn_dropout(p = 0.5)  # drop out with p probability
-    self$output <- nn_linear(n_hidden, 1)
-    self$sigmoid <- nn_sigmoid()
-  },
-  forward = function(x) {
-    x <- self$embedding(x)  # embedding lookup
-    x <- torch_flatten(x, start_dim = 2)  # flatten embeddings
-    x <- self$hidden(x)  # Pass through the hidden layer
-    x <- self$dropout(x)  # apply dropout
-    x <- self$output(x)  # Pass through the output layer
-    x <- self$sigmoid(x)  # Apply sigmoid to get probabilities
-    return(x)
+predict <- function(embedding_dim, 
+                    n_hidden, 
+                    batch_size,
+                    learn_rate,
+                    num_epochs) {
+  require(torch)
+  require(tidyverse)
+  set.seed(1)
+  torch_manual_seed(1)
+  #
+  # model variables
+  #
+  max_len <- tensor_data_train$size(2)
+  #
+  # model setup
+  #
+  model <- nn_module(
+    initialize = function(embed_dim, n_hidden, max_len) {
+      self$embedding <- nn_embedding(
+        length(vocab) + 2, 
+        embed_dim, 
+        padding_idx = length(vocab) + 1)
+      self$hidden <- nn_linear(embed_dim * max_len, n_hidden)
+      self$dropout <- nn_dropout(p = 0.5)  # drop out with p probability
+      self$output <- nn_linear(n_hidden, 1)
+      self$sigmoid <- nn_sigmoid()
+    },
+    forward = function(x) {
+      x <- self$embedding(x)  # embedding lookup
+      x <- torch_flatten(x, start_dim = 2)  # flatten embeddings
+      x <- self$hidden(x)  # Pass through the hidden layer
+      x <- self$dropout(x)  # apply dropout
+      x <- self$output(x)  # Pass through the output layer
+      x <- self$sigmoid(x)  # Apply sigmoid to get probabilities
+      return(x)
+    }
+  )
+  #
+  # instantiate
+  #
+  nn <- model(embedding_dim, n_hidden, max_len)
+  rm(
+    model, 
+    embedding_dim,
+    max_len, 
+    n_hidden)
+  #
+  # dataloader
+  #
+  dataloader_train <- dataloader(
+    dataset = enron_tensor_dataset_train,  # Your custom dataset
+    batch_size = batch_size,         # The batch size you want to use
+    shuffle = TRUE                   # Whether to shuffle the data
+  )
+  dataloader_test <- dataloader(
+    dataset = enron_tensor_dataset_test,  # Your custom dataset
+    batch_size = batch_size,         # The batch size you want to use
+    shuffle = TRUE                   # Whether to shuffle the data
+  )
+  #
+  # training
+  #
+  optimizer <- optim_adam(nn$parameters, lr = learn_rate)
+  criterion <- nn_bce_loss()
+  for (epoch in 1:num_epochs) {
+    total_loss <- 0
+    coro::loop(for (batch in dataloader_train) {
+      batch_data <- 
+        batch[[1]]$to(dtype = torch_int64()) + 
+        torch_tensor(1, dtype = torch_int64())
+      batch_labels <- batch[[2]]$to(dtype = torch_float32())
+      optimizer$zero_grad()  # reset gradients
+      output <- nn(batch_data) # forward pass
+      loss <- criterion(output, batch_labels) # compute loss
+      loss$backward() # backward pass and optimize
+      optimizer$step()
+      total_loss <- total_loss + loss$item()
+    })
+    cat("Epoch:", 
+        epoch, 
+        "Average Loss:", 
+        total_loss / length(dataloader_train), 
+        "\n")
   }
-)
-nn <- model(embedding_dim, n_hidden, max_len)
-rm(
-  model, 
-  embedding_dim,
-  max_len, 
-  n_hidden)
-#
-# training variables
-#
-batch_size <- 500
-optimizer <- optim_adam(nn$parameters, lr = 0.001)
-num_epochs <- 20
-#
-# data loader
-#
-dataloader_train <- dataloader(
-  dataset = enron_tensor_dataset_train,  # Your custom dataset
-  batch_size = batch_size,         # The batch size you want to use
-  shuffle = TRUE                   # Whether to shuffle the data
-)
-dataloader_test <- dataloader(
-  dataset = enron_tensor_dataset_test,  # Your custom dataset
-  batch_size = batch_size,         # The batch size you want to use
-  shuffle = TRUE                   # Whether to shuffle the data
-)
-#
-# training
-#
-criterion <- nn_bce_loss()
-for (epoch in 1:num_epochs) {
-  total_loss <- 0
-  coro::loop(for (batch in dataloader_train) {
-    batch_data <- 
-      batch[[1]]$to(dtype = torch_int64()) + 
-      torch_tensor(1, dtype = torch_int64())
-    batch_labels <- batch[[2]]$to(dtype = torch_float32())
-    optimizer$zero_grad()  # reset gradients
-    output <- nn(batch_data) # forward pass
-    loss <- criterion(output, batch_labels) # compute loss
-    loss$backward() # backward pass and optimize
-    optimizer$step()
-    total_loss <- total_loss + loss$item() # accumulate loss for monitoring
+  nn$eval() # set model to evaluation mode
+  with_no_grad({ # no need to compute gradients in eval mode
+    train_scores <- 
+      nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
   })
-  cat("Epoch:", 
-      epoch, 
-      "Average Loss:", 
-      total_loss / length(dataloader_train), 
-      "\n")
+  train_scores <- # create new variable
+    as_array(train_scores) # convert scores tensor to r vector
+  enron_train <- # update original dataset
+    enron_train |> # pipe out original dataset
+    mutate(score = train_scores) # add new column
+  with_no_grad({ # no need to compute gradients in eval mode
+    train_scores <- 
+      nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
+  })
+  train_scores <- # create new variable
+    as_array(train_scores) # convert scores tensor to r vector
+  enron_train <<- # update original dataset
+    enron_train |> # pipe out original dataset
+    mutate(score = train_scores) # add new column
+  with_no_grad({
+    test_scores <- 
+      nn(tensor_data_test)$squeeze() # fwd pass, remove singleton dims
+  })
+  test_scores <- # create new variable
+    as_array(test_scores) # convert scores tensor to r vector
+  enron_test <<- # update original dataset
+    enron_test |> # pipe out original dataset
+    mutate(score = test_scores) # add new column
+  rm(
+    criterion, 
+    optimizer, 
+    num_epochs, 
+    epoch,
+    train_scores,
+    test_scores)
+  accuracy <- enron_test |>
+    mutate(
+      correct = (score > 0.5 & relevant == 1) | 
+        (score <= 0.5 & relevant == 0)) |>
+    summarize(correct_percentage = mean(correct) * 100) |>
+    as.numeric()
+  return(accuracy)
 }
+predict(embedding_dim = 64, # best 64
+        n_hidden = 64, # best 64
+        batch_size = 500, # best 500
+        learn_rate = 0.001, # best 0.001
+        num_epochs = 10) # best 10
 ```
 
-    ## Epoch: 1 Average Loss: 1.281696 
-    ## Epoch: 2 Average Loss: 1.290685 
-    ## Epoch: 3 Average Loss: 1.057882 
-    ## Epoch: 4 Average Loss: 0.8255272 
-    ## Epoch: 5 Average Loss: 0.6022261 
-    ## Epoch: 6 Average Loss: 0.6175299 
-    ## Epoch: 7 Average Loss: 0.6096246 
-    ## Epoch: 8 Average Loss: 0.5145197 
-    ## Epoch: 9 Average Loss: 0.4515073 
-    ## Epoch: 10 Average Loss: 0.4429001 
-    ## Epoch: 11 Average Loss: 0.3975128 
-    ## Epoch: 12 Average Loss: 0.3718781 
-    ## Epoch: 13 Average Loss: 0.3488004 
-    ## Epoch: 14 Average Loss: 0.336427 
-    ## Epoch: 15 Average Loss: 0.3272066 
-    ## Epoch: 16 Average Loss: 0.2950471 
-    ## Epoch: 17 Average Loss: 0.2958529 
-    ## Epoch: 18 Average Loss: 0.2750439 
-    ## Epoch: 19 Average Loss: 0.2609306 
-    ## Epoch: 20 Average Loss: 0.2466744
+    ## Epoch: 1 Average Loss: 3.879612 
+    ## Epoch: 2 Average Loss: 26.06334 
+    ## Epoch: 3 Average Loss: 26.76064 
+    ## Epoch: 4 Average Loss: 20.05321 
+    ## Epoch: 5 Average Loss: 14.95605 
+    ## Epoch: 6 Average Loss: 10.79899 
+    ## Epoch: 7 Average Loss: 7.020485 
+    ## Epoch: 8 Average Loss: 2.215733 
+    ## Epoch: 9 Average Loss: 1.732187 
+    ## Epoch: 10 Average Loss: 1.197121
 
-``` r
-nn$eval() # set model to evaluation mode
-with_no_grad({
-  train_scores <- 
-    nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
-})
-train_scores <- # create new variable
-  as_array(train_scores) # convert scores tensor to r vector
-enron_train <- # update original dataset
-  enron_train |> # pipe out original dataset
-  mutate(score = train_scores) # add new column
-with_no_grad({
-  train_scores <- 
-    nn(tensor_data_train)$squeeze() # fwd pass, remove singleton dims
-})
-train_scores <- # create new variable
-  as_array(train_scores) # convert scores tensor to r vector
-enron_train <- # update original dataset
-  enron_train |> # pipe out original dataset
-  mutate(score = train_scores) # add new column
-with_no_grad({
-  test_scores <- 
-    nn(tensor_data_test)$squeeze() # fwd pass, remove singleton dims
-})
-test_scores <- # create new variable
-  as_array(test_scores) # convert scores tensor to r vector
-enron_test <- # update original dataset
-  enron_test |> # pipe out original dataset
-  mutate(score = test_scores) # add new column
-rm(
-  criterion, 
-  optimizer, 
-  num_epochs, 
-  epoch,
-  train_scores,
-  test_scores)
-enron_test |>
-  mutate(
-    correct = (score > 0.5 & relevant == 1) | 
-      (score <= 0.5 & relevant == 0)) |>
-  summarize(correct_percentage = mean(correct) * 100) |>
-  as.numeric()
-```
-
-    ## [1] 46.61017
+    ## [1] 55.9322
 
 ## Result Distribution
 
@@ -465,11 +437,11 @@ require(ggplot2) # for plotting
 require(tidyverse) # for data manipulation
 require(viridis)
 ggplot(enron_test, aes(x = score, fill = ..count..)) +
-  geom_histogram(binwidth = 0.05) +
+  geom_histogram(binwidth = 0.1) +
   labs(title = "Histogram of Scores",
        x = "Score",
        y = "Frequency") +
-  scale_fill_viridis_c()
+  scale_fill_viridis_c(option = "viridis", end = 0.8)
 ```
 
 <img src="README_files/figure-gfm/result_distribution-1.png"  />
@@ -480,10 +452,10 @@ ggplot(enron_test, aes(x = score, fill = ..count..)) +
 # exerpt
 relevant_1 <- enron_test |>
   filter(relevant == 1) |>
-  sample_n(10)
+  sample_n(5)
 relevant_0 <- enron_test |>
   filter(relevant == 0) |>
-  sample_n(10)
+  sample_n(5)
 sampled_enron <- 
   bind_rows(relevant_1, relevant_0)
 sampled_enron |>
@@ -491,52 +463,20 @@ sampled_enron |>
   as.data.frame()
 ```
 
-    ##                doc_id relevant     score
-    ## 1  ENR.0001.0045.0984        1 0.2733521
-    ## 2  ENR.0001.0217.0701        1 0.1813560
-    ## 3  ENR.0001.0037.0631        1 0.3923280
-    ## 4  ENR.0001.0177.0856        1 0.2400435
-    ## 5  ENR.0001.0118.0483        1 0.1188278
-    ## 6  ENR.0001.0116.0506        1 0.6233805
-    ## 7  ENR.0001.0118.0304        1 0.2420841
-    ## 8  ENR.0001.0177.0740        1 0.7098238
-    ## 9  ENR.0001.0118.0408        1 0.1180888
-    ## 10 ENR.0001.0194.0850        1 0.5128819
-    ## 11 ENR.0001.0118.0216        0 0.4568646
-    ## 12 ENR.0001.0113.0677        0 0.4061086
-    ## 13 ENR.0001.0116.0747        0 0.7990165
-    ## 14 ENR.0001.0158.0254        0 0.4958428
-    ## 15 ENR.0001.0116.0638        0 0.7752228
-    ## 16 ENR.0001.0117.0093        0 0.8625825
-    ## 17 ENR.0001.0116.0616        0 0.6347539
-    ## 18 ENR.0001.0116.0660        0 0.4728081
-    ## 19 ENR.0001.0117.0054        0 0.8037809
-    ## 20 ENR.0001.0116.0768        0 0.4720142
+    ##                doc_id relevant      score
+    ## 1  ENR.0001.0045.0984        1 0.86490560
+    ## 2  ENR.0001.0217.0701        1 0.40854099
+    ## 3  ENR.0001.0037.0631        1 0.49969888
+    ## 4  ENR.0001.0177.0856        1 0.86068857
+    ## 5  ENR.0001.0118.0483        1 0.04761263
+    ## 6  ENR.0001.0117.0087        0 0.47990373
+    ## 7  ENR.0001.0113.0742        0 0.35656768
+    ## 8  ENR.0001.0118.0421        0 0.29154062
+    ## 9  ENR.0001.0117.0243        0 0.35441574
+    ## 10 ENR.0001.0115.0166        0 0.44813871
 
 ``` r
 rm(relevant_1,
    relevant_0,
    sampled_enron)
 ```
-
-## NN Function
-
-Encapsulate the neural network training and prediction in a function
-call for ease of tuning.
-
-``` r
-predict <- function(embedding_dim, 
-                    n_hidden, 
-                    batch_size,
-                    learn_rate,
-                    num_epochs) {
-  return(50)
-}
-predict(embedding_dim = 64,
-        n_hidden = 64,
-        batch_size = 500,
-        learn_rate = 0.001,
-        num_epochs = 20)
-```
-
-    ## [1] 50

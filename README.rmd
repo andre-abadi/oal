@@ -96,12 +96,13 @@ require(ggplot2)
 enron %>%
   mutate(content_length = nchar(content)) %>%
   ggplot(aes(x = content_length, fill = ..count..)) +
-  geom_histogram(binwidth = 2000,) +
+  geom_histogram(binwidth = 0.5,) +
   #scale_x_log10() +
-  scale_fill_viridis_c(option = "viridis") +
+  scale_fill_viridis_c(option = "viridis", end = 0.8) +
   labs(title = "Distribution of Message Lengths", 
        x = "Message Length (characters)", 
-       y = "Frequency")
+       y = "Frequency") +
+  scale_x_continuous(trans='log')
 # excerpt
 #enron |>
 #  mutate(content_length = nchar(content)) |>
@@ -364,7 +365,7 @@ predict <- function(embedding_dim,
   })
   train_scores <- # create new variable
     as_array(train_scores) # convert scores tensor to r vector
-  enron_train <- # update original dataset
+  enron_train <<- # update original dataset
     enron_train |> # pipe out original dataset
     mutate(score = train_scores) # add new column
   with_no_grad({
@@ -373,7 +374,7 @@ predict <- function(embedding_dim,
   })
   test_scores <- # create new variable
     as_array(test_scores) # convert scores tensor to r vector
-  enron_test <- # update original dataset
+  enron_test <<- # update original dataset
     enron_test |> # pipe out original dataset
     mutate(score = test_scores) # add new column
   rm(
@@ -405,11 +406,11 @@ require(ggplot2) # for plotting
 require(tidyverse) # for data manipulation
 require(viridis)
 ggplot(enron_test, aes(x = score, fill = ..count..)) +
-  geom_histogram(binwidth = 0.05) +
+  geom_histogram(binwidth = 0.1) +
   labs(title = "Histogram of Scores",
        x = "Score",
        y = "Frequency") +
-  scale_fill_viridis_c()
+  scale_fill_viridis_c(option = "viridis", end = 0.8)
 ```
 
 
@@ -431,10 +432,3 @@ rm(relevant_1,
    relevant_0,
    sampled_enron)
 ```
-
-
-## NN Function
-
-Encapsulate the neural network training and prediction in a function call for ease of tuning.
-
-

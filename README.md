@@ -114,7 +114,7 @@ friendly format.
     ##   117
     ## [ CPULongType{8} ]
 
-### Declare Model
+## Train and Evaluate Model
 
 With the data preprocessed and converted into the necessary formats, we
 can train a neural network on the training data and then evaluate it on
@@ -162,7 +162,7 @@ We provide a histogram showing distribution of test scores. We expect an
 effect model to have higher frequencies at extremes.
 <img src="README_files/figure-gfm/result_distribution-1.png"  />
 
-### Result Sample
+## Result Sample
 
 We also provide a sample of scores on the test dataset below. These are
 merely illustrative and not indicative of model performance.

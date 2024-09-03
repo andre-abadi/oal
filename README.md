@@ -182,24 +182,15 @@ merely illustrative and not indicative of model performance.
 
 ## Bayesian Hyperparameter Optimisation
 
-    ## elapsed = 3.02   Round = 1   embedding_dim = 57.0000 n_hidden = 118.0000 batch_size = 285.0000   learn_rate = 0.005027222    num_epochs = 9.0000 Value = 0.6271186 
-    ## elapsed = 1.24   Round = 2   embedding_dim = 68.0000 n_hidden = 123.0000 batch_size = 259.0000   learn_rate = 0.007204423    num_epochs = 3.0000 Value = 0.4237288 
-    ## elapsed = 2.25   Round = 3   embedding_dim = 87.0000 n_hidden = 95.0000  batch_size = 718.0000   learn_rate = 0.00991987 num_epochs = 7.0000 Value = 0.5000 
-    ## elapsed = 0.94   Round = 4   embedding_dim = 119.0000    n_hidden = 92.0000  batch_size = 446.0000   learn_rate = 0.003862348    num_epochs = 2.0000 Value = 0.5508475 
-    ## elapsed = 0.64   Round = 5   embedding_dim = 51.0000 n_hidden = 38.0000  batch_size = 793.0000   learn_rate = 0.007796708    num_epochs = 3.0000 Value = 0.4915254 
-    ## elapsed = 2.35   Round = 6   embedding_dim = 123.0000    n_hidden = 49.0000  batch_size = 618.0000   learn_rate = 0.005021856    num_epochs = 7.0000 Value = 0.5677966 
-    ## elapsed = 3.95   Round = 7   embedding_dim = 107.0000    n_hidden = 128.0000 batch_size = 721.0000   learn_rate = 0.005376449    num_epochs = 10.0000    Value = 0.4661017 
-    ## elapsed = 2.51   Round = 8   embedding_dim = 92.0000 n_hidden = 44.0000  batch_size = 538.0000   learn_rate = 0.003652285    num_epochs = 9.0000 Value = 0.5254237 
-    ## elapsed = 1.74   Round = 9   embedding_dim = 95.0000 n_hidden = 59.0000  batch_size = 904.0000   learn_rate = 0.004034705    num_epochs = 6.0000 Value = 0.4830508 
-    ## elapsed = 2.34   Round = 10  embedding_dim = 58.0000 n_hidden = 35.0000  batch_size = 546.0000   learn_rate = 0.004706346    num_epochs = 10.0000    Value = 0.3983051 
-    ## elapsed = 2.95   Round = 11  embedding_dim = 79.0000 n_hidden = 118.0000 batch_size = 869.0000   learn_rate = 0.003836681    num_epochs = 9.0000 Value = 0.5254237 
-    ## elapsed = 1.15   Round = 12  embedding_dim = 94.0000 n_hidden = 32.0000  batch_size = 426.0000   learn_rate = 0.006755333    num_epochs = 4.0000 Value = 0.5338983 
-    ## elapsed = 1.14   Round = 13  embedding_dim = 94.0000 n_hidden = 32.0000  batch_size = 426.0000   learn_rate = 0.006755333    num_epochs = 4.0000 Value = 0.5338983 
-    ## elapsed = 1.13   Round = 14  embedding_dim = 94.0000 n_hidden = 32.0000  batch_size = 426.0000   learn_rate = 0.006755333    num_epochs = 4.0000 Value = 0.5338983 
-    ## elapsed = 1.13   Round = 15  embedding_dim = 94.0000 n_hidden = 32.0000  batch_size = 426.0000   learn_rate = 0.006755333    num_epochs = 4.0000 Value = 0.5338983 
     ## 
     ##  Best Parameters Found: 
-    ## Round = 1    embedding_dim = 57.0000 n_hidden = 118.0000 batch_size = 285.0000   learn_rate = 0.005027222    num_epochs = 9.0000 Value = 0.6271186
+    ## Round = 3    embedding_dim = 160.0000    n_hidden = 95.0000  batch_size = 1390.0000  learn_rate = 0.00991987 num_epochs = 13.0000    dropout_rate = 0.2529552    Value = 0.6355932
 
-    ## embedding_dim      n_hidden    batch_size    learn_rate    num_epochs 
-    ##  5.700000e+01  1.180000e+02  2.850000e+02  5.027222e-03  9.000000e+00
+    ##        Variable   Value
+    ## 1 embedding_dim  160.00
+    ## 2      n_hidden   95.00
+    ## 3    batch_size 1390.00
+    ## 4    learn_rate    0.01
+    ## 5    num_epochs   13.00
+    ## 6  dropout_rate    0.25
+    ## 7    Best_Value    0.64

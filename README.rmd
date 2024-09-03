@@ -294,7 +294,8 @@ predict <- function(embedding_dim,
                     n_hidden, 
                     batch_size,
                     learn_rate,
-                    num_epochs) {
+                    num_epochs,
+                    dropout_rate) {
   require(torch)
   require(tidyverse)
   set.seed(1)
@@ -313,7 +314,7 @@ predict <- function(embedding_dim,
         embed_dim, 
         padding_idx = length(vocab) + 1)
       self$hidden <- nn_linear(embed_dim * max_len, n_hidden)
-      self$dropout <- nn_dropout(p = 0.5)  # drop out with p probability
+      self$dropout <- nn_dropout(p = dropout_rate)  # 0.5
       self$output <- nn_linear(n_hidden, 1)
       self$sigmoid <- nn_sigmoid()
     },
@@ -421,7 +422,8 @@ predict(embedding_dim = 64, # best 64
         n_hidden = 64, # best 64
         batch_size = 500, # best 500
         learn_rate = 0.001, # best 0.001
-        num_epochs = 6) # best 6
+        num_epochs = 6, # best 6
+        dropout_rate = 0.5) # best 0.5
 ```
 
 
@@ -473,17 +475,20 @@ optimization_function <-
            n_hidden, 
            batch_size, 
            learn_rate, 
-           num_epochs) {
+           num_epochs,
+           dropout_rate) {
   embedding_dim <- round(embedding_dim)
   n_hidden <- round(n_hidden)
   batch_size <- round(batch_size)
   num_epochs <- round(num_epochs)
+  dropout_rate <- as.numeric(dropout_rate)
   accuracy <- predict(
     embedding_dim = embedding_dim,
     n_hidden = n_hidden,
     batch_size = batch_size,
     learn_rate = learn_rate,
-    num_epochs = num_epochs
+    num_epochs = num_epochs,
+    dropout_rate = dropout_rate
   )
   return(list(Score = accuracy, Pred = accuracy))
 }
@@ -492,7 +497,8 @@ bounds <- list(
   n_hidden = c(32L, 128L), # originally 32-128
   batch_size = c(50L, 2000L), # originally 100-1000
   learn_rate = c(0.0001, 0.01), # originally 0.0001-0.01
-  num_epochs = c(1L, 20L) # originally 1-10
+  num_epochs = c(1L, 20L), # originally 1-10
+  dropout_rate = c(0.1, 0.5) # originally nailed at 0.5
 )
 bayesian_results <- 
   BayesianOptimization(
@@ -502,7 +508,20 @@ bayesian_results <-
   n_iter = 10,
   acq = "ei",
   verbose = FALSE
+) |> invisible()
+best_params <- bayesian_results$Best_Par
+param_names <- names(best_params)
+param_values <- as.numeric(best_params) |> round(2)
+df_params <- data.frame(
+  Variable = param_names,
+  Value = param_values
 )
-bayesian_results$History |> as.data.frame()
-print(bayesian_results$Best_Par) |> as.data.frame()
+best_value <- bayesian_results$Best_Value |> round(2)
+df_value <- data.frame(
+  Variable = "Best_Value",
+  Value = best_value
+)
+final_df <- rbind(df_params, df_value)
+rm(best_params, param_names, param_values, best_value, df_params, df_value)
+print(final_df)
 ```

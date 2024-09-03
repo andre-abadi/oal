@@ -11,7 +11,7 @@ knitr::opts_chunk$set(
   echo = FALSE, # knit code (default = TRUE)
   message = FALSE, # knit messages (default = TRUE)
   warning = FALSE, # knit warnings (default = TRUE)
-  cache = TRUE, # cache knitted chunks (default = FALSE)
+  cache = FALSE, # cache knitted chunks (default = FALSE)
   fig.align = "centre", # align figures to centre
   #fig.pos = "H", # hard-here-mode for plots
   out.extra = ""
@@ -54,6 +54,7 @@ enron$content[23] |>
 ## Clean
 
 We perform extensive preprocessing on the content column of the Enron dataset. We apply various Regex patterns to remove non-word characters, URLs, email addresses, and file paths. The content is then converted to lower case, contractions are expanded, and Unicode normalization is applied. We remove stop words and clean up whitespace to ensure no extra spaces remain. Finally, we filter out rows with empty content after preprocessing. We display the cleaned content of a specific document as an excerpt.
+
 ```{r content_words_only}
 require(tidyverse) # mutate
 require(tidytext) # stop_words
@@ -95,6 +96,7 @@ enron$content[23] |>
 ## Message Length Survey
 
 We visualize the distribution of message lengths in the Enron dataset. Each message's length is calculated, and the distribution is plotted on a logarithmic scale to better handle the wide range of message lengths. The histogram is color-coded using the viridis color palette, enhancing the visualization by mapping the frequency of message lengths to a gradient. The plot provides insights into how the lengths of messages are distributed across the dataset.
+
 ```{r length_distro}
 require(ggplot2)
 enron %>%
@@ -139,6 +141,7 @@ enron$content[23] |>
 ## Training/Testing Split
 
 We split the classified data into training and testing subsets at an 80:20 ratio. This means that the model can train on 80% of the available data while 20% is held out and not seen by the model during training, so that it can be used to evaluate model performance fairly. We show ratio of relevant and not-relevant documents in each set as a means of checking that undertaking this process yielded sets that were balanced across the binary classification.
+
 ```{r train-test}
 require(tidyverse)
 set.seed(1)
@@ -166,6 +169,7 @@ rm(train_ratio
 ## Tokenize
 
 We tokenize the training set by creating a vocabulary of all words used therein, in frequency order i.e. lower vocabulary indexes indicate higher frequency of the word in the data. We provide the same sample message again in tokenized form, to show the effect of this step, which makes the messages readable by the model.
+
 ```{r tokenize}
 require(tidyverse)
 enron_train <- 
@@ -203,6 +207,7 @@ enron_train |> filter(doc_id == "ENR.0001.0017.0141") |> pull(indices)
 ## Convert to Tensors
 
 Mainly procedural, we must convert these plain lists into a format known as Tensors, which is a data storage format designed specifically for machine learning and the torch framework. The same message is shown again, with only the vocabulary word indexes in the order they appear in the message. Duplicates are allowed, and this effectively completes the conversion of the message from human readable format to machine-learning friendly format.
+
 ```{r tensors}
 require(torch)  # for tensor operations
 set.seed(1)
@@ -455,4 +460,49 @@ sampled_enron |>
 rm(relevant_1,
    relevant_0,
    sampled_enron)
+```
+
+## Bayesian Hyperparameter Optimisation
+
+```{r bayesian_optimisation}
+require(rBayesianOptimization)
+set.seed(1)
+torch_manual_seed(1)
+optimization_function <- 
+  function(embedding_dim, 
+           n_hidden, 
+           batch_size, 
+           learn_rate, 
+           num_epochs) {
+  embedding_dim <- round(embedding_dim)
+  n_hidden <- round(n_hidden)
+  batch_size <- round(batch_size)
+  num_epochs <- round(num_epochs)
+  accuracy <- predict(
+    embedding_dim = embedding_dim,
+    n_hidden = n_hidden,
+    batch_size = batch_size,
+    learn_rate = learn_rate,
+    num_epochs = num_epochs
+  )
+  return(list(Score = accuracy, Pred = accuracy))
+}
+bounds <- list(
+  embedding_dim = c(32L, 256L), # originally 23-128
+  n_hidden = c(32L, 128L), # originally 32-128
+  batch_size = c(50L, 2000L), # originally 100-1000
+  learn_rate = c(0.0001, 0.01), # originally 0.0001-0.01
+  num_epochs = c(1L, 20L) # originally 1-10
+)
+bayesian_results <- 
+  BayesianOptimization(
+  FUN = optimization_function,
+  bounds = bounds,
+  init_points = 5,
+  n_iter = 10,
+  acq = "ei",
+  verbose = FALSE
+)
+bayesian_results$History |> as.data.frame()
+print(bayesian_results$Best_Par) |> as.data.frame()
 ```

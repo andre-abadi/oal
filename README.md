@@ -1,7 +1,7 @@
 “oal” - Occasional Active Learning
 ================
 Andre Abadi
-2024-10-28
+2024-10-29
 
 ## Introduction
 
@@ -15,7 +15,6 @@ educational purposes. We hope to meet or exceed the following metrics:
 |--------------------------|----------|
 | Accuracy (50% threshold) | 0.74     |
 | ROC-AUC                  | 0.77     |
-| KAP                      | 0.46     |
 
 ### References
 
@@ -73,7 +72,7 @@ Julia Silge. This text is available as an interactive resource at
 
 ## Modelling
 
-### Null Model
+### Model 00 - Null Model
 
 > “a ‘null model’ or baseline model, \[is\] a simple, non-informative
 > model that always predicts the largest class for classification. Such
@@ -83,6 +82,17 @@ Julia Silge. This text is available as an interactive resource at
     ##    .metric      mean    std_err
     ## 1 accuracy 0.4883402 0.01210339
     ## 2  roc_auc 0.5000000 0.00000000
+
+### Model 01 - Naive Bayes
+
+A Naive Bayes classifier applies Bayes’ Theorem to predict class
+membership by calculating conditional probabilities, making the “naive”
+assumption that features are conditionally independent of each other.
+Despite this simplifying assumption, the classifier is remarkably
+effective, particularly for text classification tasks. It works by
+learning the probability of each feature occurring within each class
+during training, then combining these probabilities with prior class
+probabilities to predict the most likely class for new instances.
 
     ##    .metric      mean    std_err
     ## 1 accuracy 0.7193495 0.01505729

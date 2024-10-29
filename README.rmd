@@ -3,7 +3,13 @@ title: "\"oal\" - Occasional Active Learning"
 subtitle: "An open source implementation of e-discovery active learning"
 author: "Andre Abadi"
 date: "`r Sys.Date()`"
-output: github_document
+output:
+  github_document:
+    df_print: kable
+  pdf_document:
+    fig_caption: true # render captions for figures
+    extra_dependencies: ["float"] # floating images
+    df_print: kable # print dataframes as kables automatically
 ---
 
 ```{r setup_output, include=FALSE}
@@ -119,7 +125,7 @@ recipe_01
 
 ## Modelling
 
-### Null Model
+### Model 00 - Null Model
 
 >"a 'null model' or baseline model, [is] a simple, non-informative model that always predicts the largest class for classification. Such a model is perhaps the simplest heuristic or rule-based alternative that we can consider as we assess our modelling efforts."
 
@@ -146,6 +152,10 @@ m00_null_results |>
   filter(.metric != "brier_class") |>
   as.data.frame()
 ```
+
+### Model 01 - Naive Bayes
+
+A Naive Bayes classifier applies Bayes' Theorem to predict class membership by calculating conditional probabilities, making the "naive" assumption that features are conditionally independent of each other. Despite this simplifying assumption, the classifier is remarkably effective, particularly for text classification tasks. It works by learning the probability of each feature occurring within each class during training, then combining these probabilities with prior class probabilities to predict the most likely class for new instances.
 
 ```{r m01_bayes}
 require(tidyverse)

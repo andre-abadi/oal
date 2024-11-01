@@ -1,7 +1,7 @@
 “oal” - Occasional Active Learning
 ================
 Andre Abadi
-2024-10-29
+2024-11-01
 
 ## Introduction
 
@@ -11,10 +11,10 @@ such predictive models but are proprietary. This project aims to provide
 an open source equivalent, not for production (necessarily) but for
 educational purposes. We hope to meet or exceed the following metrics:
 
-| Metric                   | Estimate |
-|--------------------------|----------|
-| Accuracy (50% threshold) | 0.74     |
-| ROC-AUC                  | 0.77     |
+| .metric  | estimate |
+|----------|----------|
+| accuracy | 0.74     |
+| roc_auc  | 0.77     |
 
 ### References
 
@@ -57,18 +57,29 @@ Julia Silge. This text is available as an interactive resource at
 
 ## Prepare
 
+### Results Table
+
 ### Tidy
 
-    ## Rows: 5,000
+    ## Rows: 1,662
     ## Columns: 4
-    ## $ doc_id     <chr> "ENR.9000.0001.0040", "ENR.9000.0001.0133", "ENR.9000.0001.…
-    ## $ relevant   <fct> NA, NA, NA, NA, 1, 0, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0…
-    ## $ train_test <fct> NA, NA, NA, NA, train, test, NA, NA, NA, NA, NA, NA, NA, NA…
-    ## $ content    <chr> "Jim, Is there going to be a conference call or some type o…
+    ## $ doc_id     <chr> "ENR.9000.0001.0380", "ENR.9000.0001.0382", "ENR.9000.0002.…
+    ## $ relevant   <fct> 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,…
+    ## $ train_test <fct> train, test, train, train, test, train, train, train, test,…
+    ## $ content    <chr> "I also need to know the base salaries of Jay Reitmeyer and…
 
 ### Splits and Folds
 
-### Preprocessing Recipe
+### Preprocessing Recipes
+
+Our first recipe is a basic recipe for ingestion to the null model, and
+is unfiltered tokenization truncated at the top 1000 with TF-IDF
+subsequently applied. We do not propose to use it for any true
+modelling.
+
+The second recipe is similar to the first, with unfiltered tokenization,
+but this time with the top *n* tokens set for tuning between 500 and
+5000, and TF-IDF applied subsequently as with the previous recipe.
 
 ## Modelling
 
@@ -79,11 +90,34 @@ Julia Silge. This text is available as an interactive resource at
 > a model is perhaps the simplest heuristic or rule-based alternative
 > that we can consider as we assess our modelling efforts.”
 
-    ##    .metric      mean    std_err
-    ## 1 accuracy 0.4883402 0.01210339
-    ## 2  roc_auc 0.5000000 0.00000000
+<div class="kable-table">
+
+| .metric  |      mean |   std_err |
+|:---------|----------:|----------:|
+| accuracy | 0.4883402 | 0.0121034 |
+| roc_auc  | 0.5000000 | 0.0000000 |
+
+</div>
+
+The null model above shows a ROC_AUC of
+
+<div class="kable-table">
+
+| mean |
+|-----:|
+|  0.5 |
+
+</div>
+
+indicating that without any predictive modelling, the null model guesses
+the correct classification that proportion of the time. This is
+consistent with the 50:50 breakdown of labelled training data. It is
+akin to flipping a coin, and provides our baseline that we hope to
+improve upon.
 
 ### Model 01 - Naive Bayes
+
+[SMLTAR 7.1.1](https://smltar.com/mlclassification#classfirstmodel)
 
 A Naive Bayes classifier applies Bayes’ Theorem to predict class
 membership by calculating conditional probabilities, making the “naive”
@@ -94,6 +128,63 @@ learning the probability of each feature occurring within each class
 during training, then combining these probabilities with prior class
 probabilities to predict the most likely class for new instances.
 
-    ##    .metric      mean    std_err
-    ## 1 accuracy 0.7193495 0.01505729
-    ## 2  roc_auc 0.7693570 0.01255672
+<div class="kable-table">
+
+| .metric  |      mean |   std_err |
+|:---------|----------:|----------:|
+| accuracy | 0.7088346 | 0.0101899 |
+| roc_auc  | 0.7375180 | 0.0078804 |
+
+</div>
+
+<div class="figure" style="text-align: centre">
+
+<img src="README_files/figure-gfm/m01-1.png" alt="Confusion Matrix for Model 00 - Naive Bayes"  />
+<p class="caption">
+Confusion Matrix for Model 00 - Naive Bayes
+</p>
+
+</div>
+
+Analysing the above results we see that there is reasonable but
+unbalanced performance. The model was effective at classifying the
+irrelevant documents but did not perform well at classifying the
+relevant documents. Given the balanced training data, this suggests the
+model did not perform well at this task.
+
+### Model 02 - LASSO
+
+[SMLTAR 7.3](https://smltar.com/mlclassification#comparetolasso)
+
+> “Regularized linear models are a class of statistical model that can
+> be used in regression and classification tasks. Linear models are not
+> considered cutting edge in NLP research, but are a workhorse in
+> real-world practice. Here we will use a lasso regularized model
+> (Tibshirani 1996), where the regularization method also performs
+> variable selection. In text analysis, we typically have many tokens,
+> which are the features in our machine learning problem.”
+
+<div class="kable-table">
+
+| .metric  |      mean |   std_err |
+|:---------|----------:|----------:|
+| accuracy | 0.7351390 | 0.0089512 |
+| roc_auc  | 0.8034412 | 0.0109814 |
+
+</div>
+
+<div class="figure" style="text-align: centre">
+
+<img src="README_files/figure-gfm/m02-1.png" alt="Confusion Matrix for Model 01 - LASSO"  />
+<p class="caption">
+Confusion Matrix for Model 01 - LASSO
+</p>
+
+</div>
+
+In Figure (fig:m02) above we see that the LASSO model produces more
+balanced classifications between Relevant and Irrelevant. The
+regularisation penalty was tuned to achieve the above result. We see a
+small increase in the accuracy metric, and a significant improvement in
+the ROC_AUC metric. This, combined with the subjective assessment via
+the confusion matrix suggests an improved model overall.

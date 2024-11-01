@@ -39,10 +39,10 @@ library(naivebayes)
 
 The aim of this project is to develop a predictive model for binary classification of legal documents. Many e-discovery platforms implement such predictive models but are proprietary. This project aims to provide an open source equivalent, not for production (necessarily) but for educational purposes. We hope to meet or exceed the following metrics:
 
-| Metric | Estimate |
+| .metric | estimate |
 | --- | --- |
-| Accuracy (50% threshold) | 0.74 |
-| ROC-AUC | 0.77 |
+| accuracy | 0.74 |
+| roc_auc | 0.77 |
 
 ### References
 
@@ -70,6 +70,10 @@ enron_raw |> glimpse()
 ```
 ## Prepare
 
+### Results Table
+
+
+
 ### Tidy
 
 ```{r tidy}
@@ -79,7 +83,8 @@ tidymodels_prefer()
 set.seed(1)
 enron_tidy <-
   enron_raw |>
-  select(-subject,-date,-from,-to)
+  select(-subject,-date,-from,-to) |>
+  filter(!is.na(train_test))
 enron_tidy |> glimpse()
 ```
 
@@ -107,21 +112,42 @@ enron_folds <-
   vfold_cv(enron_train)
 ```
 
-### Preprocessing Recipe
+### Preprocessing Recipes
 
-```{r recipe_01}
+Our first recipe is a basic recipe for ingestion to the null model, and is unfiltered tokenization truncated at the top 1000 with TF-IDF subsequently applied. We do not propose to use it for any true modelling.
+
+```{r r00}
 require(tidyverse)
 require(tidymodels)
 tidymodels_prefer()
 set.seed(1)
 require(textrecipes)
-recipe_01 <-
+r00_null_1k <-
   recipe(relevant ~ content, data = enron_train) |>
   step_tokenize(content) |>
   step_tokenfilter(content, max_tokens = 1e3) |>
   step_tfidf(content)
-recipe_01
 ```
+The second recipe is similar to the first, with unfiltered tokenization, but this time with the top *n* tokens set for tuning between 500 and 5000, and TF-IDF applied subsequently as with the previous recipe.
+
+```{r r01}
+require(tidyverse)
+require(tidymodels)
+tidymodels_prefer()
+set.seed(1)
+require(textrecipes)
+r01a_tfidf_rec <-
+  recipe(relevant ~ content, data = enron_train) |>
+  step_tokenize(content) |>
+  step_tokenfilter(content, max_tokens = tune()) |>
+  step_tfidf(content)
+r01b_tfidf_tune <-
+  grid_regular(
+    max_tokens(range = c(100,5000)),
+    levels = 5
+  )
+```
+
 
 ## Modelling
 
@@ -129,35 +155,49 @@ recipe_01
 
 >"a 'null model' or baseline model, [is] a simple, non-informative model that always predicts the largest class for classification. Such a model is perhaps the simplest heuristic or rule-based alternative that we can consider as we assess our modelling efforts."
 
-```{r m00_null}
+```{r m00}
 require(tidyverse)
 require(tidymodels)
 tidymodels_prefer()
 set.seed(1)
 require(textrecipes)
-m00_null_model <-
+m00a_null_mod <-
   null_model() |>
   set_engine("parsnip") |>
   set_mode("classification")
-m00_null_wf <-
+m00b_null_wf <-
   workflow() |>
-  add_recipe(recipe_01) |>
-  add_model(m00_null_model)
-m00_null_results <-
-  m00_null_wf |>
-  fit_resamples(enron_folds)
-m00_null_results |> 
-  collect_metrics() |>
+  add_recipe(r00_null_1k) |>
+  add_model(m00a_null_mod)
+m00c_null_fit <-
+  m00b_null_wf |>
+  fit_resamples(
+    resamples = enron_folds,
+    control = control_resamples(save_pred = TRUE)
+  )
+m00d_null_met <-
+  m00c_null_fit |> 
+  collect_metrics()
+m00d_null_met |>
   select(.metric,mean,std_err) |>
   filter(.metric != "brier_class") |>
   as.data.frame()
+rm(
+  m00a_null_mod,
+  m00b_null_wf,
+  m00c_null_fit
+)
 ```
+
+The null model above shows a ROC_AUC of `r m00d_null_met[3,3]` indicating that without any predictive modelling, the null model guesses the correct classification that proportion of the time. This is consistent with the 50:50 breakdown of labelled training data. It is akin to flipping a coin, and provides our baseline that we hope to improve upon.
 
 ### Model 01 - Naive Bayes
 
+[SMLTAR 7.1.1](https://smltar.com/mlclassification#classfirstmodel)
+
 A Naive Bayes classifier applies Bayes' Theorem to predict class membership by calculating conditional probabilities, making the "naive" assumption that features are conditionally independent of each other. Despite this simplifying assumption, the classifier is remarkably effective, particularly for text classification tasks. It works by learning the probability of each feature occurring within each class during training, then combining these probabilities with prior class probabilities to predict the most likely class for new instances.
 
-```{r m01_bayes}
+```{r m01, fig.cap="Confusion Matrix for Model 00 - Naive Bayes"}
 require(tidyverse)
 require(tidymodels)
 tidymodels_prefer()
@@ -165,20 +205,151 @@ set.seed(1)
 require(textrecipes)
 require(discrim)
 require(naivebayes)
-m01_bayes_model <-
+m01a_bayes_mod <-
   naive_Bayes() |>
   set_mode("classification") |>
   set_engine("naivebayes")
-m01_bayes_wf <-
+m01b_bayes_wf <-
   workflow() |>
-  add_recipe(recipe_01) |>
-  add_model(m01_bayes_model)
-m01_bayes_results <-
-  m01_bayes_wf |>
-  fit_resamples(enron_folds)
-m01_bayes_results |> 
-  collect_metrics() |>
+  add_recipe(r01a_tfidf_rec) |>
+  add_model(m01a_bayes_mod)
+m01c_bayes_fit <-
+  m01b_bayes_wf |>
+  tune_grid(
+    resamples = enron_folds,
+    grid = r01b_tfidf_tune,
+    control = control_resamples(save_pred = TRUE)
+  )
+m01d_bayes_tune <-
+  m01c_bayes_fit |>
+  select_by_one_std_err(metric = "roc_auc", -max_tokens)
+m01e_bayes_fin <-
+  finalize_workflow(
+    m01b_bayes_wf,
+    m01d_bayes_tune
+  )
+m01f_bayes_fit2 <-
+  m01e_bayes_fin |>
+  fit_resamples(
+    resamples = enron_folds,
+    control = control_resamples(save_pred = TRUE)
+  )
+m01g_bayes_met <-
+  m01f_bayes_fit2 |>
+  collect_metrics()
+m01h_bayes_roc <- m01f_bayes_fit2 |>
+  collect_predictions() |>
+  group_by(id) |>
+  roc_curve(relevant, .pred_1) |>
+  mutate(model = "Naive Bayes")
+# output
+m01g_bayes_met |>
   select(.metric,mean,std_err) |>
   filter(.metric != "brier_class") |>
   as.data.frame()
+m01f_bayes_fit2 |>
+  collect_predictions() |> 
+  conf_mat(truth = relevant, 
+          estimate = .pred_class) |>
+  autoplot(type = "heatmap") +
+  scale_fill_viridis_c(begin = 0.3) +
+  scale_x_discrete(labels = c("0" = "Irrelevant", "1" = "Relevant")) +
+  scale_y_discrete(labels = c("0" = "Irrelevant", "1" = "Relevant")) +
+  labs(
+    title = "Confusion Matrix for Model 00 - Naive Bayes",
+    x = "Truth",
+    y = "Prediction"
+  )
+rm(
+  m01a_bayes_mod,
+  m01b_bayes_wf,
+  m01c_bayes_fit,
+  m01d_bayes_tune,
+  m01e_bayes_fin
+)
 ```
+
+Analysing the above results we see that there is reasonable but unbalanced performance. The model was effective at classifying the irrelevant documents but did not perform well at classifying the relevant documents. Given the balanced training data, this suggests the model did not perform well at this task.
+
+### Model 02 - LASSO
+
+[SMLTAR 7.3](https://smltar.com/mlclassification#comparetolasso)
+
+>"Regularized linear models are a class of statistical model that can be used in regression and classification tasks. Linear models are not considered cutting edge in NLP research, but are a workhorse in real-world practice. Here we will use a lasso regularized model (Tibshirani 1996), where the regularization method also performs variable selection. In text analysis, we typically have many tokens, which are the features in our machine learning problem."
+
+```{r m02, fig.cap="Confusion Matrix for Model 01 - LASSO"}
+require(tidyverse)
+require(tidymodels)
+tidymodels_prefer()
+set.seed(1)
+m02a_lasso_mod <-
+  logistic_reg(penalty = tune(), mixture = 1) |>
+  set_mode("classification") |>
+  set_engine("glmnet")
+m02b_lasso_wf <- 
+  workflow() |>
+  add_recipe(r00_null_1k) |>
+  add_model(m02a_lasso_mod)
+m02c_lasso_grid <-
+  grid_regular(penalty(), 
+               levels = 30)
+m02d_lasso_fit <-
+  m02b_lasso_wf |>
+  tune_grid(
+    resamples = enron_folds,
+    grid = m02c_lasso_grid,
+    control = control_resamples(save_pred = TRUE)
+  )
+m02e_lasso_best <-
+  m02d_lasso_fit |>
+  select_by_one_std_err(metric = "roc_auc", -penalty)
+m02f_lasso_fin <-
+  finalize_workflow(
+    m02b_lasso_wf,
+    m02e_lasso_best
+  )
+m02g_lasso_fit2 <-
+  m02f_lasso_fin |>
+  fit_resamples(
+    resamples = enron_folds,
+    control = control_resamples(save_pred = TRUE)
+  )
+m02h_lasso_met <-
+  m02g_lasso_fit2 |>
+  collect_metrics()
+m02h_lasso_met |>
+  select(.metric,mean,std_err) |>
+  filter(.metric != "brier_class") |>
+  as.data.frame()
+m02i_lasso_roc <-
+  m02g_lasso_fit2 |>
+  collect_predictions() |>
+  group_by(id) |>
+  roc_curve(relevant, .pred_1) |>
+  mutate(model = "LASSO")
+m02g_lasso_fit2 |>
+  collect_predictions() |> 
+  conf_mat(truth = relevant, 
+          estimate = .pred_class) |>
+  autoplot(type = "heatmap") +
+  scale_fill_viridis_c(begin = 0.3) +
+  scale_x_discrete(labels = c("0" = "Irrelevant", "1" = "Relevant")) +
+  scale_y_discrete(labels = c("0" = "Irrelevant", "1" = "Relevant")) +
+  labs(
+    title = "Confusion Matrix for Model 01 - LASSO Regularised Model",
+    x = "Truth",
+    y = "Prediction"
+  )
+rm(
+  m02a_lasso_mod,
+  m02b_lasso_wf,
+  m02c_lasso_grid,
+  m02d_lasso_fit,
+  m02e_lasso_best,
+  m02f_lasso_fin
+)
+```
+
+In Figure \ref(fig:m02) above we see that the LASSO model produces more balanced classifications between Relevant and Irrelevant. The regularisation penalty was tuned to achieve the above result. We see a small increase in the accuracy metric, and a significant improvement in the ROC_AUC metric. This, combined with the subjective assessment via the confusion matrix suggests an improved model overall.
+
+

@@ -70,10 +70,6 @@ enron_raw |> glimpse()
 ```
 ## Prepare
 
-### Results Table
-
-
-
 ### Tidy
 
 ```{r tidy}
@@ -122,7 +118,7 @@ require(tidymodels)
 tidymodels_prefer()
 set.seed(1)
 require(textrecipes)
-r00_null_1k <-
+recipe_null <-
   recipe(relevant ~ content, data = enron_train) |>
   step_tokenize(content) |>
   step_tokenfilter(content, max_tokens = 1e3) |>
@@ -136,22 +132,19 @@ require(tidymodels)
 tidymodels_prefer()
 set.seed(1)
 require(textrecipes)
-r01a_tfidf_rec <-
+recipe_tfidf <-
   recipe(relevant ~ content, data = enron_train) |>
   step_tokenize(content) |>
   step_tokenfilter(content, max_tokens = tune()) |>
   step_tfidf(content)
-r01b_tfidf_tune <-
-  grid_regular(
-    max_tokens(range = c(100,5000)),
-    levels = 5
-  )
 ```
 
 
 ## Modelling
 
 ### Model 00 - Null Model
+
+[SMLTAR 7.2](https://smltar.com/mlclassification#classnull)
 
 >"a 'null model' or baseline model, [is] a simple, non-informative model that always predicts the largest class for classification. Such a model is perhaps the simplest heuristic or rule-based alternative that we can consider as we assess our modelling efforts."
 
@@ -161,35 +154,36 @@ require(tidymodels)
 tidymodels_prefer()
 set.seed(1)
 require(textrecipes)
-m00a_null_mod <-
+null_model <-
   null_model() |>
   set_engine("parsnip") |>
   set_mode("classification")
-m00b_null_wf <-
+null_workflow <-
   workflow() |>
-  add_recipe(r00_null_1k) |>
-  add_model(m00a_null_mod)
-m00c_null_fit <-
-  m00b_null_wf |>
+  add_recipe(recipe_null) |>
+  add_model(null_model)
+null_fit <-
+  null_workflow |>
   fit_resamples(
     resamples = enron_folds,
     control = control_resamples(save_pred = TRUE)
   )
-m00d_null_met <-
-  m00c_null_fit |> 
+null_metrics <-
+  null_fit |> 
   collect_metrics()
-m00d_null_met |>
+null_metrics |>
   select(.metric,mean,std_err) |>
   filter(.metric != "brier_class") |>
   as.data.frame()
 rm(
-  m00a_null_mod,
-  m00b_null_wf,
-  m00c_null_fit
+  null_model,
+  null_workflow,
+  null_fit,
+  null_metrics
 )
 ```
 
-The null model above shows a ROC_AUC of `r m00d_null_met[3,3]` indicating that without any predictive modelling, the null model guesses the correct classification that proportion of the time. This is consistent with the 50:50 breakdown of labelled training data. It is akin to flipping a coin, and provides our baseline that we hope to improve upon.
+The null model above shows a ROC_AUC indicating that without any predictive modelling, the null model guesses the correct classification that proportion of the time. This is consistent with the 50:50 breakdown of labelled training data. It is akin to flipping a coin, and provides our baseline that we hope to improve upon.
 
 ### Model 01 - Naive Bayes
 
@@ -197,7 +191,7 @@ The null model above shows a ROC_AUC of `r m00d_null_met[3,3]` indicating that w
 
 A Naive Bayes classifier applies Bayes' Theorem to predict class membership by calculating conditional probabilities, making the "naive" assumption that features are conditionally independent of each other. Despite this simplifying assumption, the classifier is remarkably effective, particularly for text classification tasks. It works by learning the probability of each feature occurring within each class during training, then combining these probabilities with prior class probabilities to predict the most likely class for new instances.
 
-```{r m01, fig.cap="Confusion Matrix for Model 00 - Naive Bayes"}
+```{r m01}
 require(tidyverse)
 require(tidymodels)
 tidymodels_prefer()
@@ -205,49 +199,54 @@ set.seed(1)
 require(textrecipes)
 require(discrim)
 require(naivebayes)
-m01a_bayes_mod <-
+bayes_model <-
   naive_Bayes() |>
   set_mode("classification") |>
   set_engine("naivebayes")
-m01b_bayes_wf <-
+bayes_workflow <-
   workflow() |>
-  add_recipe(r01a_tfidf_rec) |>
-  add_model(m01a_bayes_mod)
-m01c_bayes_fit <-
-  m01b_bayes_wf |>
+  add_recipe(recipe_tfidf) |>
+  add_model(bayes_model)
+bayes_grid <-
+  grid_regular(
+    max_tokens(range = c(100,5000)),
+    levels = 5
+  )
+bayes_resamples <-
+  bayes_workflow |>
   tune_grid(
     resamples = enron_folds,
-    grid = r01b_tfidf_tune,
+    grid = bayes_grid,
     control = control_resamples(save_pred = TRUE)
   )
-m01d_bayes_tune <-
-  m01c_bayes_fit |>
+bayes_best <-
+  bayes_resamples |>
   select_by_one_std_err(metric = "roc_auc", -max_tokens)
-m01e_bayes_fin <-
+bayes_final_workflow <-
   finalize_workflow(
-    m01b_bayes_wf,
-    m01d_bayes_tune
+    bayes_workflow,
+    bayes_best 
   )
-m01f_bayes_fit2 <-
-  m01e_bayes_fin |>
+bayes_final_fit <-
+  bayes_final_workflow |>
   fit_resamples(
     resamples = enron_folds,
     control = control_resamples(save_pred = TRUE)
   )
-m01g_bayes_met <-
-  m01f_bayes_fit2 |>
+bayes_metrics <-
+  bayes_final_fit |>
   collect_metrics()
-m01h_bayes_roc <- m01f_bayes_fit2 |>
+bayes_roc <- 
+  bayes_final_fit |>
   collect_predictions() |>
   group_by(id) |>
   roc_curve(relevant, .pred_1) |>
   mutate(model = "Naive Bayes")
-# output
-m01g_bayes_met |>
+bayes_metrics |>
   select(.metric,mean,std_err) |>
   filter(.metric != "brier_class") |>
   as.data.frame()
-m01f_bayes_fit2 |>
+bayes_final_fit |>
   collect_predictions() |> 
   conf_mat(truth = relevant, 
           estimate = .pred_class) |>
@@ -261,11 +260,13 @@ m01f_bayes_fit2 |>
     y = "Prediction"
   )
 rm(
-  m01a_bayes_mod,
-  m01b_bayes_wf,
-  m01c_bayes_fit,
-  m01d_bayes_tune,
-  m01e_bayes_fin
+  bayes_model,
+  bayes_workflow,
+  bayes_grid,
+  bayes_resamples,
+  bayes_best,
+  bayes_final_workflow,
+  bayes_metrics
 )
 ```
 
@@ -277,57 +278,52 @@ Analysing the above results we see that there is reasonable but unbalanced perfo
 
 >"Regularized linear models are a class of statistical model that can be used in regression and classification tasks. Linear models are not considered cutting edge in NLP research, but are a workhorse in real-world practice. Here we will use a lasso regularized model (Tibshirani 1996), where the regularization method also performs variable selection. In text analysis, we typically have many tokens, which are the features in our machine learning problem."
 
-```{r m02, fig.cap="Confusion Matrix for Model 01 - LASSO"}
+```{r m02}
 require(tidyverse)
 require(tidymodels)
 tidymodels_prefer()
 set.seed(1)
-m02a_lasso_mod <-
+lasso_model <-
   logistic_reg(penalty = tune(), mixture = 1) |>
   set_mode("classification") |>
   set_engine("glmnet")
-m02b_lasso_wf <- 
+lasso_workflow <- 
   workflow() |>
-  add_recipe(r00_null_1k) |>
-  add_model(m02a_lasso_mod)
-m02c_lasso_grid <-
-  grid_regular(penalty(), 
-               levels = 30)
-m02d_lasso_fit <-
-  m02b_lasso_wf |>
+  add_recipe(recipe_tfidf) |>
+  add_model(lasso_model)
+lasso_grid <- 
+  grid_regular(
+    max_tokens(range = c(500, 2000)),
+    penalty(range = c(-4, 0)),
+    levels = c(3, 3)
+  )
+lasso_resamples <-
+  lasso_workflow |>
   tune_grid(
     resamples = enron_folds,
-    grid = m02c_lasso_grid,
+    grid = lasso_grid,
     control = control_resamples(save_pred = TRUE)
   )
-m02e_lasso_best <-
-  m02d_lasso_fit |>
+lasso_best <-
+  lasso_resamples |>
   select_by_one_std_err(metric = "roc_auc", -penalty)
-m02f_lasso_fin <-
+lasso_final_workflow <-
   finalize_workflow(
-    m02b_lasso_wf,
-    m02e_lasso_best
+    lasso_workflow,
+    lasso_best
   )
-m02g_lasso_fit2 <-
-  m02f_lasso_fin |>
+lasso_final_fit <-
+  lasso_final_workflow |>
   fit_resamples(
     resamples = enron_folds,
     control = control_resamples(save_pred = TRUE)
   )
-m02h_lasso_met <-
-  m02g_lasso_fit2 |>
-  collect_metrics()
-m02h_lasso_met |>
+lasso_final_fit |>
+  collect_metrics() |>
   select(.metric,mean,std_err) |>
   filter(.metric != "brier_class") |>
   as.data.frame()
-m02i_lasso_roc <-
-  m02g_lasso_fit2 |>
-  collect_predictions() |>
-  group_by(id) |>
-  roc_curve(relevant, .pred_1) |>
-  mutate(model = "LASSO")
-m02g_lasso_fit2 |>
+lasso_final_fit |>
   collect_predictions() |> 
   conf_mat(truth = relevant, 
           estimate = .pred_class) |>
@@ -341,15 +337,61 @@ m02g_lasso_fit2 |>
     y = "Prediction"
   )
 rm(
-  m02a_lasso_mod,
-  m02b_lasso_wf,
-  m02c_lasso_grid,
-  m02d_lasso_fit,
-  m02e_lasso_best,
-  m02f_lasso_fin
+  lasso_model,
+  lasso_workflow,
+  lasso_grid,
+  lasso_resamples,
+  lasso_best,
+  lasso_final_workflow
 )
 ```
 
-In Figure \ref(fig:m02) above we see that the LASSO model produces more balanced classifications between Relevant and Irrelevant. The regularisation penalty was tuned to achieve the above result. We see a small increase in the accuracy metric, and a significant improvement in the ROC_AUC metric. This, combined with the subjective assessment via the confusion matrix suggests an improved model overall.
+In the above results we see that the LASSO model produces more balanced classifications between Relevant and Irrelevant. The regularisation penalty was tuned to achieve the above result. We see a small increase in the accuracy metric, and a significant improvement in the ROC_AUC metric. This, combined with the subjective assessment via the confusion matrix suggests an improved model overall.
 
-
+```{r roc_compare}
+require(tidyverse)
+bayes_roc <- bayes_final_fit |>
+  collect_predictions() |>
+  group_by(id) |>
+  roc_curve(truth = relevant, .pred_0) |>
+  mutate(model = "Naive Bayes")
+lasso_roc <- lasso_final_fit |>
+  collect_predictions() |>
+  group_by(id) |>
+  roc_curve(truth = relevant, .pred_0) |>
+  mutate(model = "LASSO")
+bind_rows(bayes_roc, lasso_roc) |>
+  group_by(model, 
+          specificity = round(specificity, 2)) |>
+  summarize(
+    sensitivity_mean = mean(sensitivity),
+    sensitivity_lower = quantile(sensitivity, 0.025),
+    sensitivity_upper = quantile(sensitivity, 0.975),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = 1 - specificity, 
+             y = sensitivity_mean, 
+             color = model,
+             fill = model)) +
+  geom_ribbon(aes(ymin = sensitivity_lower,
+                  ymax = sensitivity_upper),
+              alpha = 0.2,
+              color = NA) +
+  geom_line(linewidth = 1.2) +
+  geom_abline(lty = 3) +
+  coord_equal() +
+  scale_color_viridis_d(end = 0.8) +
+  scale_fill_viridis_d(end = 0.8) +
+  labs(
+    title = "ROC Curves: Naive Bayes vs LASSO",
+    subtitle = "Mean performance with 95% confidence intervals",
+    x = "False Positive Rate (1 - Specificity)",
+    y = "True Positive Rate (Sensitivity)",
+    color = "Model",
+    fill = "Model"
+  )
+rm(
+  bayes_roc,
+  lasso_roc
+)
+```

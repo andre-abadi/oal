@@ -57,8 +57,6 @@ Julia Silge. This text is available as an interactive resource at
 
 ## Prepare
 
-### Results Table
-
 ### Tidy
 
     ## Rows: 1,662
@@ -85,6 +83,8 @@ but this time with the top *n* tokens set for tuning between 500 and
 
 ### Model 00 - Null Model
 
+[SMLTAR 7.2](https://smltar.com/mlclassification#classnull)
+
 > “a ‘null model’ or baseline model, \[is\] a simple, non-informative
 > model that always predicts the largest class for classification. Such
 > a model is perhaps the simplest heuristic or rule-based alternative
@@ -99,21 +99,11 @@ but this time with the top *n* tokens set for tuning between 500 and
 
 </div>
 
-The null model above shows a ROC_AUC of
-
-<div class="kable-table">
-
-| mean |
-|-----:|
-|  0.5 |
-
-</div>
-
-indicating that without any predictive modelling, the null model guesses
-the correct classification that proportion of the time. This is
-consistent with the 50:50 breakdown of labelled training data. It is
-akin to flipping a coin, and provides our baseline that we hope to
-improve upon.
+The null model above shows a ROC_AUC indicating that without any
+predictive modelling, the null model guesses the correct classification
+that proportion of the time. This is consistent with the 50:50 breakdown
+of labelled training data. It is akin to flipping a coin, and provides
+our baseline that we hope to improve upon.
 
 ### Model 01 - Naive Bayes
 
@@ -137,14 +127,7 @@ probabilities to predict the most likely class for new instances.
 
 </div>
 
-<div class="figure" style="text-align: centre">
-
-<img src="README_files/figure-gfm/m01-1.png" alt="Confusion Matrix for Model 00 - Naive Bayes"  />
-<p class="caption">
-Confusion Matrix for Model 00 - Naive Bayes
-</p>
-
-</div>
+<img src="README_files/figure-gfm/m01-1.png"  />
 
 Analysing the above results we see that there is reasonable but
 unbalanced performance. The model was effective at classifying the
@@ -168,23 +151,18 @@ model did not perform well at this task.
 
 | .metric  |      mean |   std_err |
 |:---------|----------:|----------:|
-| accuracy | 0.7351390 | 0.0089512 |
-| roc_auc  | 0.8034412 | 0.0109814 |
+| accuracy | 0.7298644 | 0.0110272 |
+| roc_auc  | 0.8038973 | 0.0135815 |
 
 </div>
 
-<div class="figure" style="text-align: centre">
+<img src="README_files/figure-gfm/m02-1.png"  />
 
-<img src="README_files/figure-gfm/m02-1.png" alt="Confusion Matrix for Model 01 - LASSO"  />
-<p class="caption">
-Confusion Matrix for Model 01 - LASSO
-</p>
+In the above results we see that the LASSO model produces more balanced
+classifications between Relevant and Irrelevant. The regularisation
+penalty was tuned to achieve the above result. We see a small increase
+in the accuracy metric, and a significant improvement in the ROC_AUC
+metric. This, combined with the subjective assessment via the confusion
+matrix suggests an improved model overall.
 
-</div>
-
-In Figure (fig:m02) above we see that the LASSO model produces more
-balanced classifications between Relevant and Irrelevant. The
-regularisation penalty was tuned to achieve the above result. We see a
-small increase in the accuracy metric, and a significant improvement in
-the ROC_AUC metric. This, combined with the subjective assessment via
-the confusion matrix suggests an improved model overall.
+<img src="README_files/figure-gfm/roc_compare-1.png"  />

@@ -21,7 +21,8 @@ educational purposes. We hope to meet or exceed the following metrics:
 Our primary text reference for this project is *Supervised Machine
 Learning for Text Analysis in R* (**SMLTAR**) by Emil Whitfield and
 Julia Silge. This text is available as an interactive resource at
-[smltar.com](https://smltar.com/).
+[smltar.com](https://smltar.com/). Where not otherwise cited, quotes are
+from this primary text reference.
 
 ### Style and Conventions
 
@@ -66,14 +67,24 @@ Julia Silge. This text is available as an interactive resource at
     ## $ train_test <fct> train, test, train, train, test, train, train, train, test,…
     ## $ content    <chr> "I also need to know the base salaries of Jay Reitmeyer and…
 
+### Exploratory Data Analysis
+
+[SMLTAR 8.1](https://smltar.com/dldnn#kickstarter)
+
+<img src="README_files/figure-gfm/histo-1.png"  />
+
 ### Splits and Folds
 
-### Preprocessing Recipes
+## Modelling
 
-Our first recipe is a basic recipe for ingestion to the null model, and
-is unfiltered tokenization truncated at the top 1000 with TF-IDF
-subsequently applied. We do not propose to use it for any true
-modelling.
+### Model 00 - Null Model
+
+[SMLTAR 7.2](https://smltar.com/mlclassification#classnull)
+
+For our null model, we create our first recipe. It is a basic recipe for
+ingestion to the null model, and is unfiltered tokenization truncated at
+the top 1000 with TF-IDF subsequently applied. We do not propose to use
+it for any true modelling.
 
 <div class="kable-table">
 
@@ -86,16 +97,6 @@ modelling.
 | 0.0000000 | 0.0000000 | 0.0000000 | 0.0124821 | 0.0061548 |
 
 </div>
-
-The second recipe is similar to the first, with unfiltered tokenization,
-but this time with the top *n* tokens set for tuning between 500 and
-5000, and TF-IDF applied subsequently as with the previous recipe.
-
-## Modelling
-
-### Model 00 - Null Model
-
-[SMLTAR 7.2](https://smltar.com/mlclassification#classnull)
 
 > “a ‘null model’ or baseline model, \[is\] a simple, non-informative
 > model that always predicts the largest class for classification. Such
@@ -120,6 +121,11 @@ our baseline that we hope to improve upon.
 ### Model 01 - Naive Bayes
 
 [SMLTAR 7.1.1](https://smltar.com/mlclassification#classfirstmodel)
+
+For this model, we implement a new tune-able recipe. This second recipe
+is similar to the first, with unfiltered tokenization, but this time
+with the top *n* tokens set for tuning between 500 and 5000, and TF-IDF
+applied subsequently as with the previous recipe.
 
 A Naive Bayes classifier applies Bayes’ Theorem to predict class
 membership by calculating conditional probabilities, making the “naive”
@@ -151,6 +157,10 @@ model did not perform well at this task.
 
 [SMLTAR 7.3](https://smltar.com/mlclassification#comparetolasso)
 
+For this model we re-use the same recipe as we used for Model 01 - Naive
+Bayes. This recipe had a tune-able token count and we use it for this
+model also.
+
 > “Regularized linear models are a class of statistical model that can
 > be used in regression and classification tasks. Linear models are not
 > considered cutting edge in NLP research, but are a workhorse in
@@ -176,6 +186,53 @@ penalty was tuned to achieve the above result. We see a small increase
 in the accuracy metric, and a significant improvement in the ROC_AUC
 metric. This, combined with the subjective assessment via the confusion
 matrix suggests an improved model overall.
+
+### Model 03 - Dense Neural Network (DNN)
+
+[SMLTAR 8.1](https://smltar.com/dldnn#firstdlclassification)
+
+We implement “a densely connected neural network. This is typically not
+a model that will achieve the highest performance on text data, but it
+is a good place to start to understand the process of building and
+evaluating deep learning models for text. We can also use this type of
+network architecture as a bridge between the bag-of-words approaches. …
+Deep learning allows us to incorporate not just word counts but also
+word sequences and positions.”
+
+<div class="kable-table">
+
+| vocabulary | token     |
+|-----------:|:----------|
+|        878 | 3771      |
+|       6526 | dkreiman  |
+|      12204 | mayeaux   |
+|      11041 | kenton    |
+|      19284 | valuation |
+|       7075 | elc       |
+|      14662 | polled    |
+|       9638 | holding   |
+|      18543 | tfg       |
+|       3476 | bogged    |
+
+</div>
+
+[SMLTAR 8.2.3](https://smltar.com/dldnn#simple-flattened-dense-network)
+
+With our new one-hot encoding recipe ready, we create the model object.
+
+- “Linear stacks of layers.”
+- First layer embedding “will take each observation … and make dense
+  vectors from our word sequences. This turns each observation into a …
+  data cube.”
+- “The \[flatten\] layer takes the matrix for each observation and
+  flattens them into one dimension. This \[creates\] a … long vector for
+  each observation.”
+- “Lastly, we have 2 densely connected layers. The last layer has a
+  sigmoid activation function to give us an output between 0 and 1,
+  since we want to model a probability for a binary classification
+  problem.”
+
+<img src="README_files/figure-gfm/dnn-1.png"  />
 
 ## Comparison
 

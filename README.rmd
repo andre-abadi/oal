@@ -33,6 +33,7 @@ tidymodels_prefer()
 library(textrecipes)
 library(discrim)
 library(naivebayes)
+library(keras)
 ```
 
 ## Introduction
@@ -46,7 +47,7 @@ The aim of this project is to develop a predictive model for binary classificati
 
 ### References
 
-Our primary text reference for this project is *Supervised Machine Learning for Text Analysis in R* (**SMLTAR**) by Emil Whitfield and Julia Silge. This text is available as an interactive resource at [smltar.com](https://smltar.com/).
+Our primary text reference for this project is *Supervised Machine Learning for Text Analysis in R* (**SMLTAR**) by Emil Whitfield and Julia Silge. This text is available as an interactive resource at [smltar.com](https://smltar.com/). Where not otherwise cited, quotes are from this primary text reference.
 
 ### Style and Conventions
 
@@ -84,6 +85,32 @@ enron_tidy <-
 enron_tidy |> glimpse()
 ```
 
+### Exploratory Data Analysis
+
+[SMLTAR 8.1](https://smltar.com/dldnn#kickstarter)
+
+```{r histo}
+require(tidyverse)
+require(viridis)
+enron_tidy |>
+  mutate(content_length = str_count(content, "\\w+")) |>
+  filter(!is.na(content_length)) |>
+  ggplot(aes(x = content_length)) +
+  geom_histogram(
+    aes(fill = after_stat(count)), 
+    binwidth = 0.1,
+  ) +
+  scale_fill_viridis_c() +
+  labs(
+    title = "Distribution of content length.",
+    x = "Content Length (Words)",
+    y = "Log10( Count )",
+    fill = "Frequency"
+  ) +
+  theme(legend.position = "none") +
+  scale_x_log10()
+```
+
 ### Splits and Folds
 
 ```{r splits_and_folds}
@@ -108,9 +135,13 @@ enron_folds <-
   vfold_cv(enron_train)
 ```
 
-### Preprocessing Recipes
+## Modelling
 
-Our first recipe is a basic recipe for ingestion to the null model, and is unfiltered tokenization truncated at the top 1000 with TF-IDF subsequently applied. We do not propose to use it for any true modelling.
+### Model 00 - Null Model
+
+[SMLTAR 7.2](https://smltar.com/mlclassification#classnull)
+
+For our null model, we create our first recipe. It is a basic recipe for ingestion to the null model, and is unfiltered tokenization truncated at the top 1000 with TF-IDF subsequently applied. We do not propose to use it for any true modelling.
 
 ```{r r00}
 require(tidyverse)
@@ -132,27 +163,6 @@ recipe_null |>
   select(1:5) |>
   as.data.frame()
 ```
-The second recipe is similar to the first, with unfiltered tokenization, but this time with the top *n* tokens set for tuning between 500 and 5000, and TF-IDF applied subsequently as with the previous recipe.
-
-```{r r01}
-require(tidyverse)
-require(tidymodels)
-tidymodels_prefer()
-set.seed(1)
-require(textrecipes)
-recipe_tfidf <-
-  recipe(relevant ~ content, data = enron_train) |>
-  step_tokenize(content) |>
-  step_tokenfilter(content, max_tokens = tune()) |>
-  step_tfidf(content)
-```
-
-
-## Modelling
-
-### Model 00 - Null Model
-
-[SMLTAR 7.2](https://smltar.com/mlclassification#classnull)
 
 >"a 'null model' or baseline model, [is] a simple, non-informative model that always predicts the largest class for classification. Such a model is perhaps the simplest heuristic or rule-based alternative that we can consider as we assess our modelling efforts."
 
@@ -196,6 +206,21 @@ The null model above shows a ROC_AUC indicating that without any predictive mode
 ### Model 01 - Naive Bayes
 
 [SMLTAR 7.1.1](https://smltar.com/mlclassification#classfirstmodel)
+
+For this model, we implement a new tune-able recipe. This second recipe is similar to the first, with unfiltered tokenization, but this time with the top *n* tokens set for tuning between 500 and 5000, and TF-IDF applied subsequently as with the previous recipe.
+
+```{r r01}
+require(tidyverse)
+require(tidymodels)
+tidymodels_prefer()
+set.seed(1)
+require(textrecipes)
+recipe_tfidf <-
+  recipe(relevant ~ content, data = enron_train) |>
+  step_tokenize(content) |>
+  step_tokenfilter(content, max_tokens = tune()) |>
+  step_tfidf(content)
+```
 
 A Naive Bayes classifier applies Bayes' Theorem to predict class membership by calculating conditional probabilities, making the "naive" assumption that features are conditionally independent of each other. Despite this simplifying assumption, the classifier is remarkably effective, particularly for text classification tasks. It works by learning the probability of each feature occurring within each class during training, then combining these probabilities with prior class probabilities to predict the most likely class for new instances.
 
@@ -284,6 +309,8 @@ Analysing the above results we see that there is reasonable but unbalanced perfo
 
 [SMLTAR 7.3](https://smltar.com/mlclassification#comparetolasso)
 
+For this model we re-use the same recipe as we used for Model 01 - Naive Bayes. This recipe had a tune-able token count and we use it for this model also.
+
 >"Regularized linear models are a class of statistical model that can be used in regression and classification tasks. Linear models are not considered cutting edge in NLP research, but are a workhorse in real-world practice. Here we will use a lasso regularized model (Tibshirani 1996), where the regularization method also performs variable selection. In text analysis, we typically have many tokens, which are the features in our machine learning problem."
 
 ```{r m02}
@@ -355,6 +382,145 @@ rm(
 ```
 
 In the above results we see that the LASSO model produces more balanced classifications between Relevant and Irrelevant. The regularisation penalty was tuned to achieve the above result. We see a small increase in the accuracy metric, and a significant improvement in the ROC_AUC metric. This, combined with the subjective assessment via the confusion matrix suggests an improved model overall.
+
+### Model 03 - Dense Neural Network (DNN)
+
+[SMLTAR 8.1](https://smltar.com/dldnn#firstdlclassification)
+
+We implement "a densely connected neural network. This is typically not a model that will achieve the highest performance on text data, but it is a good place to start to understand the process of building and evaluating deep learning models for text. We can also use this type of network architecture as a bridge between the bag-of-words approaches. ... Deep learning allows us to incorporate not just word counts but also word sequences and positions."
+
+```{r recipe_onehot}
+require(tidyverse)
+require(tidymodels)
+tidymodels_prefer()
+set.seed(1)
+require(textrecipes)
+max_words <- 2e4
+max_length <- 5000
+min_wordcount <- 2
+onehot_recipe <- 
+  recipe(~ content, data = enron_train) |>
+  step_text_normalization(content) |> 
+  step_tokenize(content) |>
+  step_stopwords(content) |>
+  step_tokenfilter(content, 
+                  max_tokens = max_words,
+                  min_times = min_wordcount) |>
+  step_sequence_onehot(content, 
+                      sequence_length = max_length,
+                      prefix = "")
+onehot_recipe |>
+  prep() |>
+  tidy(5) |>
+  slice_sample(n = 10) |>
+  as.data.frame() |>
+  select(-id,-terms)
+onehot_prep <-
+  onehot_recipe |>
+  prep()
+onehot_x <-
+  onehot_prep |>
+  bake(new_data = NULL, 
+       composition = "matrix")
+onehot_y <-
+  enron_train$relevant |>
+  as.numeric() |>
+  matrix(ncol = 1)
+rm(
+  onehot_recipe,
+  onehot_prep
+)
+```
+
+[SMLTAR 8.2.3](https://smltar.com/dldnn#simple-flattened-dense-network)
+
+With our new one-hot encoding recipe ready, we create the model object.
+
+- "Linear stacks of layers."
+- First layer embedding "will take each observation ... and make dense vectors from our word sequences. This turns each observation into a ... data cube."
+- "The [flatten] layer takes the matrix for each observation and flattens them into one dimension. This [creates] a ... long vector for each observation."
+- "Lastly, we have 2 densely connected layers. The last layer has a sigmoid activation function to give us an output between 0 and 1, since we want to model a probability for a binary classification problem."
+
+
+```{r dnn}
+require(tidyverse)
+require(tidymodels)
+tidymodels_prefer()
+set.seed(1)
+require(keras)
+logging_level <- tensorflow::tf$compat$v1$logging$ERROR
+tensorflow::tf$compat$v1$logging$set_verbosity(logging_level)
+rm(logging_level)
+Sys.setenv(TF_CPP_MIN_LOG_LEVEL = "2")
+dnn <- 
+  keras_model_sequential() %>%
+  layer_embedding(input_dim = max_words + 1,
+                  output_dim = 12,
+                  input_length = max_length) %>%
+  layer_flatten() %>%
+  layer_dense(units = 32, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+dnn |>
+  compile(
+    optimizer = "adam",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+dnn_fit <-
+  dnn |>
+  fit(
+    x = onehot_x,
+    y = onehot_y,
+    batch_size = 512,
+    epochs = 20,
+    validation_split = 0.25,
+    verbose = FALSE
+  )
+tibble(
+  epoch = seq_len(length(dnn_fit$metrics$loss)),
+  loss = dnn_fit$metrics$loss,
+  val_loss = dnn_fit$metrics$val_loss,
+  accuracy = dnn_fit$metrics$accuracy,
+  val_accuracy = dnn_fit$metrics$val_accuracy
+) |>
+  pivot_longer(
+    cols = -epoch,
+    names_to = "metric",
+    values_to = "value"
+  ) |>
+  mutate(
+    metric_type = case_when(
+      metric %in% c("loss", "val_loss") ~ "Loss",
+      metric %in% c("accuracy", "val_accuracy") ~ "Accuracy"
+    ),
+    dataset = if_else(
+      str_detect(metric, "val_"),
+      "Validation",
+      "Training"
+    )
+  ) |>
+  ggplot(aes(x = epoch, 
+           y = value, 
+           color = dataset)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 1.5, alpha = 0.5) +
+  facet_wrap(~metric_type, 
+             scales = "free_y", 
+             ncol = 1) +
+  scale_color_viridis_d(
+    begin = 0.2,
+    end = 0.8,
+    option = "viridis"
+  ) +
+  labs(
+    x = "Epoch",
+    y = NULL,
+    color = "Dataset",
+    linetype = "Dataset",
+    title = "DNN Training History",
+    subtitle = "Loss and Accuracy over Training Epochs"
+  )
+```
 
 ## Comparison
 

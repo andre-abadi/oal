@@ -123,6 +123,14 @@ recipe_null <-
   step_tokenize(content) |>
   step_tokenfilter(content, max_tokens = 1e3) |>
   step_tfidf(content)
+recipe_null |>
+  prep() |>
+  bake(new_data = NULL) |>
+  select(contains("content")) |>
+  slice_head(n = 5) |>
+  select_if(~any(. != 0)) |>
+  select(1:5) |>
+  as.data.frame()
 ```
 The second recipe is similar to the first, with unfiltered tokenization, but this time with the top *n* tokens set for tuning between 500 and 5000, and TF-IDF applied subsequently as with the previous recipe.
 
@@ -348,18 +356,24 @@ rm(
 
 In the above results we see that the LASSO model produces more balanced classifications between Relevant and Irrelevant. The regularisation penalty was tuned to achieve the above result. We see a small increase in the accuracy metric, and a significant improvement in the ROC_AUC metric. This, combined with the subjective assessment via the confusion matrix suggests an improved model overall.
 
+## Comparison
+
+We show the ROC curve of our models below.
+
 ```{r roc_compare}
 require(tidyverse)
+require(tidymodels)
+tidymodels_prefer()
 bayes_roc <- bayes_final_fit |>
   collect_predictions() |>
   group_by(id) |>
   roc_curve(truth = relevant, .pred_0) |>
-  mutate(model = "Naive Bayes")
+  mutate(model = "Model 01 - Naive Bayes")
 lasso_roc <- lasso_final_fit |>
   collect_predictions() |>
   group_by(id) |>
   roc_curve(truth = relevant, .pred_0) |>
-  mutate(model = "LASSO")
+  mutate(model = "Model 02 - LASSO")
 bind_rows(bayes_roc, lasso_roc) |>
   group_by(model, 
           specificity = round(specificity, 2)) |>
@@ -373,20 +387,19 @@ bind_rows(bayes_roc, lasso_roc) |>
              y = sensitivity_mean, 
              color = model,
              fill = model)) +
-  geom_ribbon(aes(ymin = sensitivity_lower,
-                  ymax = sensitivity_upper),
-              alpha = 0.2,
-              color = NA) +
-  geom_line(linewidth = 1.2) +
+#  geom_ribbon(aes(ymin = sensitivity_lower,
+#                  ymax = sensitivity_upper),
+#              alpha = 0.2,
+#              color = NA) +
+  geom_line(linewidth = 1) +
   geom_abline(lty = 3) +
   coord_equal() +
   scale_color_viridis_d(end = 0.8) +
   scale_fill_viridis_d(end = 0.8) +
   labs(
-    title = "ROC Curves: Naive Bayes vs LASSO",
-    subtitle = "Mean performance with 95% confidence intervals",
-    x = "False Positive Rate (1 - Specificity)",
-    y = "True Positive Rate (Sensitivity)",
+    title = "ROC Curve Comparison",
+    x = "False Positive Rate",
+    y = "True Positive Rate",
     color = "Model",
     fill = "Model"
   )

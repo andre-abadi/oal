@@ -1,7 +1,7 @@
 “oal” - Occasional Active Learning
 ================
 Andre Abadi
-2024-11-01
+2024-11-04
 
 ## Introduction
 
@@ -74,6 +74,18 @@ Our first recipe is a basic recipe for ingestion to the null model, and
 is unfiltered tokenization truncated at the top 1000 with TF-IDF
 subsequently applied. We do not propose to use it for any true
 modelling.
+
+<div class="kable-table">
+
+| tfidf_content_00 | tfidf_content_02 | tfidf_content_03 | tfidf_content_04 | tfidf_content_05 |
+|---:|---:|---:|---:|---:|
+| 0.0000000 | 0.0000000 | 0.0000000 | 0.0000000 | 0.0000000 |
+| 0.0199687 | 0.0000000 | 0.0000000 | 0.0000000 | 0.0169896 |
+| 0.0146375 | 0.0000000 | 0.0000000 | 0.0000000 | 0.0124537 |
+| 0.0232350 | 0.0072411 | 0.0129569 | 0.0000000 | 0.0395371 |
+| 0.0000000 | 0.0000000 | 0.0000000 | 0.0124821 | 0.0061548 |
+
+</div>
 
 The second recipe is similar to the first, with unfiltered tokenization,
 but this time with the top *n* tokens set for tuning between 500 and
@@ -164,5 +176,9 @@ penalty was tuned to achieve the above result. We see a small increase
 in the accuracy metric, and a significant improvement in the ROC_AUC
 metric. This, combined with the subjective assessment via the confusion
 matrix suggests an improved model overall.
+
+## Comparison
+
+We show the ROC curve of our models below.
 
 <img src="README_files/figure-gfm/roc_compare-1.png"  />

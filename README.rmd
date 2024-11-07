@@ -568,7 +568,10 @@ tibble(
 
 We show the ROC curve of our models below.
 
-```{r roc_compare, fig.height = 5, fig.width = 5}
+```{r roc_compare}
+#| fig.width: 8
+#| fig.asp: 0.618
+#| out.width: "100%"
 require(tidyverse)
 require(tidymodels)
 tidymodels_prefer()
@@ -620,7 +623,8 @@ bind_rows(ref_roc, bayes_roc, lasso_roc) |>
     legend.justification = c(0, 0),
     legend.direction = "vertical",
     legend.box = "vertical",
-    legend.background = element_rect(fill = "white", color = NA)
+    legend.background = element_rect(fill = "white", color = NA),
+    aspect.ratio = 0.7
   )
 rm(
   ref_roc,

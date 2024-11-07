@@ -258,4 +258,4 @@ With our new one-hot encoding recipe ready, we create the model object.
 
 We show the ROC curve of our models below.
 
-<img src="README_files/figure-gfm/roc_compare-1.png"  />
+<img src="README_files/figure-gfm/roc_compare-1.png" width="100%"  />

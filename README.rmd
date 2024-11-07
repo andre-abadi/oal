@@ -38,12 +38,8 @@ library(keras)
 
 ## Introduction
 
-The aim of this project is to develop a predictive model for binary classification of legal documents. Many e-discovery platforms implement such predictive models but are proprietary. This project aims to provide an open source equivalent, not for production (necessarily) but for educational purposes. We hope to meet or exceed the following metrics:
+The aim of this project is to develop a predictive model for binary classification of legal documents. Many e-discovery platforms implement such predictive models but are proprietary. This project aims to provide an open source equivalent, not for production (necessarily) but for educational purposes. 
 
-| .metric | estimate |
-| --- | --- |
-| accuracy | 0.74 |
-| roc_auc | 0.77 |
 
 ### References
 
@@ -57,6 +53,52 @@ Our primary text reference for this project is *Supervised Machine Learning for 
 - We also use the [*viridis*](https://cran.r-project.org/web/packages/viridis/vignettes/intro-to-viridis.html), colourising charts to improve accessibility of visualisations for readers with colour vision deficiency.
 - We use [Tidymodels](https://www.tidymodels.org/) for our analysis, as it promotes good modelling practices by streamlining workflows, minimizing data leakage risks, and ensuring reproducibility.
 
+## Target
+
+We hope to meet or exceed the following metrics, which were calculated on unseen test data. It should be noted that most of our modelling sets aside the unseen test data, so most confusion matrices are not directly comparable to the below in terms of utilised data, however all still provide a good subject assessment of model performance.
+
+```{r ref_metrics}
+require(tidyverse)
+require(tidymodels)
+tidymodels_prefer()
+ref <-
+  read_csv("data/reference.csv",
+           show_col_types = FALSE) |>
+  select(-full,-train,-id) |>
+  filter(!is.na(test)) |>
+  mutate(
+    truth = factor(case_when(
+      test == "irrelevant" ~ "0",
+      test == "relevant" ~ "1"
+    ), levels = c("0", "1")),
+    .pred_1 = (score + 1) / 2,
+    .pred_0 = 1 - .pred_1,
+    .pred_class = factor(if_else(.pred_1 >= 0.5, "1", "0"), 
+                        levels = c("0", "1"))
+  ) |>
+  select(truth, starts_with(".pred"))
+ref |> 
+  metric_set(accuracy, roc_auc)(
+    truth = truth,
+    estimate = .pred_class,
+    .pred_0
+  ) |>
+  as.data.frame()
+ref |> 
+  conf_mat(truth, .pred_class) |>
+  autoplot(type = "heatmap") +
+  scale_fill_viridis_c(begin = 0.3) +
+  scale_x_discrete(labels = c("0" = "Irrelevant", "1" = "Relevant")) +
+  scale_y_discrete(labels = c("0" = "Irrelevant", "1" = "Relevant")) +
+  labs(
+    title = "Confusion Matrix for Reference Model",
+    x = "Truth",
+    y = "Prediction"
+  ) |> suppressWarnings()
+```
+
+Knowing that the above reference model was fitted over a perfectly balanced training set (50:50 relevant/irrelevant) it is notable that the model produces a very unbalanced result. The model appears to be effective at classifying irrelevant documents, but not very effective at classifying relevant documents. 
+
 ## Import
 
 ```{r import}
@@ -69,6 +111,7 @@ enron_raw <-
          train_test = as_factor(train_test))
 enron_raw |> glimpse()
 ```
+
 ## Prepare
 
 ### Tidy
@@ -426,10 +469,6 @@ onehot_y <-
   enron_train$relevant |>
   as.numeric() |>
   matrix(ncol = 1)
-rm(
-  onehot_recipe,
-  onehot_prep
-)
 ```
 
 [SMLTAR 8.2.3](https://smltar.com/dldnn#simple-flattened-dense-network)
@@ -476,6 +515,11 @@ dnn_fit <-
     validation_split = 0.25,
     verbose = FALSE
   )
+```
+
+```{r dnn_plot}
+require(tidyverse)
+require(viridis)
 tibble(
   epoch = seq_len(length(dnn_fit$metrics$loss)),
   loss = dnn_fit$metrics$loss,
@@ -508,9 +552,7 @@ tibble(
              scales = "free_y", 
              ncol = 1) +
   scale_color_viridis_d(
-    begin = 0.2,
-    end = 0.8,
-    option = "viridis"
+    end = 0.8
   ) +
   labs(
     x = "Epoch",
@@ -526,21 +568,29 @@ tibble(
 
 We show the ROC curve of our models below.
 
-```{r roc_compare}
+```{r roc_compare, fig.height = 5, fig.width = 5}
 require(tidyverse)
 require(tidymodels)
 tidymodels_prefer()
-bayes_roc <- bayes_final_fit |>
+ref_roc <-
+  ref |>
+  mutate(id = "Fold01") |>
+  group_by(id) |>
+  roc_curve(truth = truth, .pred_0) |>
+  mutate(model = "Reference Model")
+bayes_roc <- 
+  bayes_final_fit |>
   collect_predictions() |>
   group_by(id) |>
   roc_curve(truth = relevant, .pred_0) |>
   mutate(model = "Model 01 - Naive Bayes")
-lasso_roc <- lasso_final_fit |>
+lasso_roc <- 
+  lasso_final_fit |>
   collect_predictions() |>
   group_by(id) |>
   roc_curve(truth = relevant, .pred_0) |>
   mutate(model = "Model 02 - LASSO")
-bind_rows(bayes_roc, lasso_roc) |>
+bind_rows(ref_roc, bayes_roc, lasso_roc) |>
   group_by(model, 
           specificity = round(specificity, 2)) |>
   summarize(
@@ -553,10 +603,6 @@ bind_rows(bayes_roc, lasso_roc) |>
              y = sensitivity_mean, 
              color = model,
              fill = model)) +
-#  geom_ribbon(aes(ymin = sensitivity_lower,
-#                  ymax = sensitivity_upper),
-#              alpha = 0.2,
-#              color = NA) +
   geom_line(linewidth = 1) +
   geom_abline(lty = 3) +
   coord_equal() +
@@ -568,8 +614,16 @@ bind_rows(bayes_roc, lasso_roc) |>
     y = "True Positive Rate",
     color = "Model",
     fill = "Model"
+  ) +
+  theme(
+    legend.position = c(0.4, 0),
+    legend.justification = c(0, 0),
+    legend.direction = "vertical",
+    legend.box = "vertical",
+    legend.background = element_rect(fill = "white", color = NA)
   )
 rm(
+  ref_roc,
   bayes_roc,
   lasso_roc
 )

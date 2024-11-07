@@ -1,7 +1,7 @@
 “oal” - Occasional Active Learning
 ================
 Andre Abadi
-2024-11-04
+2024-11-07
 
 ## Introduction
 
@@ -9,12 +9,7 @@ The aim of this project is to develop a predictive model for binary
 classification of legal documents. Many e-discovery platforms implement
 such predictive models but are proprietary. This project aims to provide
 an open source equivalent, not for production (necessarily) but for
-educational purposes. We hope to meet or exceed the following metrics:
-
-| .metric  | estimate |
-|----------|----------|
-| accuracy | 0.74     |
-| roc_auc  | 0.77     |
+educational purposes.
 
 ### References
 
@@ -42,6 +37,31 @@ from this primary text reference.
 - We use [Tidymodels](https://www.tidymodels.org/) for our analysis, as
   it promotes good modelling practices by streamlining workflows,
   minimizing data leakage risks, and ensuring reproducibility.
+
+## Target
+
+We hope to meet or exceed the following metrics, which were calculated
+on unseen test data. It should be noted that most of our modelling sets
+aside the unseen test data, so most confusion matrices are not directly
+comparable to the below in terms of utilised data, however all still
+provide a good subject assessment of model performance.
+
+<div class="kable-table">
+
+| .metric  | .estimator | .estimate |
+|:---------|:-----------|----------:|
+| accuracy | binary     | 0.7357357 |
+| roc_auc  | binary     | 0.7688223 |
+
+</div>
+
+<img src="README_files/figure-gfm/ref_metrics-1.png"  />
+
+Knowing that the above reference model was fitted over a perfectly
+balanced training set (50:50 relevant/irrelevant) it is notable that the
+model produces a very unbalanced result. The model appears to be
+effective at classifying irrelevant documents, but not very effective at
+classifying relevant documents.
 
 ## Import
 
@@ -232,7 +252,7 @@ With our new one-hot encoding recipe ready, we create the model object.
   since we want to model a probability for a binary classification
   problem.”
 
-<img src="README_files/figure-gfm/dnn-1.png"  />
+<img src="README_files/figure-gfm/dnn_plot-1.png"  />
 
 ## Comparison
 

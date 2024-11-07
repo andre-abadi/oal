@@ -445,7 +445,7 @@ onehot_recipe <-
   recipe(~ content, data = enron_train) |>
   step_text_normalization(content) |> 
   step_tokenize(content) |>
-  step_stopwords(content) |>
+  #step_stopwords(content) |>
   step_tokenfilter(content, 
                   max_tokens = max_words,
                   min_times = min_wordcount) |>
@@ -454,7 +454,7 @@ onehot_recipe <-
                       prefix = "")
 onehot_recipe |>
   prep() |>
-  tidy(5) |>
+  tidy(4) |>
   slice_sample(n = 10) |>
   as.data.frame() |>
   select(-id,-terms)
@@ -475,10 +475,14 @@ onehot_y <-
 
 With our new one-hot encoding recipe ready, we create the model object.
 
-- "Linear stacks of layers."
-- First layer embedding "will take each observation ... and make dense vectors from our word sequences. This turns each observation into a ... data cube."
-- "The [flatten] layer takes the matrix for each observation and flattens them into one dimension. This [creates] a ... long vector for each observation."
-- "Lastly, we have 2 densely connected layers. The last layer has a sigmoid activation function to give us an output between 0 and 1, since we want to model a probability for a binary classification problem."
+- Input layers:
+  - Embedding layer of 128 dimensions.
+- Hidden layers:
+  - Flatten layers (turns 2D embedding layer shape to 1D).
+  - Dropout of 50%.
+  - Dense layer of 128 units and ReLU activation.
+- Output layers:
+  - Dense layer of 1 unit and sigmoid activation.
 
 
 ```{r dnn}
@@ -515,45 +519,9 @@ dnn_fit <-
     validation_split = 0.25,
     verbose = FALSE
   )
-```
-
-```{r dnn_plot}
-require(tidyverse)
-require(viridis)
-tibble(
-  epoch = seq_len(length(dnn_fit$metrics$loss)),
-  loss = dnn_fit$metrics$loss,
-  val_loss = dnn_fit$metrics$val_loss,
-  accuracy = dnn_fit$metrics$accuracy,
-  val_accuracy = dnn_fit$metrics$val_accuracy
-) |>
-  pivot_longer(
-    cols = -epoch,
-    names_to = "metric",
-    values_to = "value"
-  ) |>
-  mutate(
-    metric_type = case_when(
-      metric %in% c("loss", "val_loss") ~ "Loss",
-      metric %in% c("accuracy", "val_accuracy") ~ "Accuracy"
-    ),
-    dataset = if_else(
-      str_detect(metric, "val_"),
-      "Validation",
-      "Training"
-    )
-  ) |>
-  ggplot(aes(x = epoch, 
-           y = value, 
-           color = dataset)) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 1.5, alpha = 0.5) +
-  facet_wrap(~metric_type, 
-             scales = "free_y", 
-             ncol = 1) +
-  scale_color_viridis_d(
-    end = 0.8
-  ) +
+plot(dnn_fit) +
+  scale_color_viridis_d(end = 0.8) +
+  scale_fill_viridis_d(end = 0.8) +
   labs(
     x = "Epoch",
     y = NULL,
@@ -561,15 +529,17 @@ tibble(
     linetype = "Dataset",
     title = "DNN Training History",
     subtitle = "Loss and Accuracy over Training Epochs"
-  )
+  ) +
+  theme(legend.position = "right")
 ```
+
 
 ## Comparison
 
 We show the ROC curve of our models below.
 
 ```{r roc_compare}
-#| fig.width: 8
+#| fig.width: 7
 #| fig.asp: 0.618
 #| out.width: "100%"
 require(tidyverse)

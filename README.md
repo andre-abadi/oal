@@ -221,18 +221,18 @@ word sequences and positions.”
 
 <div class="kable-table">
 
-| vocabulary | token     |
-|-----------:|:----------|
-|        878 | 3771      |
-|       6526 | dkreiman  |
-|      12204 | mayeaux   |
-|      11041 | kenton    |
-|      19284 | valuation |
-|       7075 | elc       |
-|      14662 | polled    |
-|       9638 | holding   |
-|      18543 | tfg       |
-|       3476 | bogged    |
+| vocabulary | token          |
+|-----------:|:---------------|
+|      13903 | ould           |
+|       9941 | ibrahim        |
+|       8229 | fire           |
+|      17513 | slashing       |
+|        878 | 3771           |
+|       6526 | dive           |
+|      12204 | marsha         |
+|      11041 | kat.wedig      |
+|      19284 | ve             |
+|       7075 | egreetings.com |
 
 </div>
 
@@ -240,19 +240,16 @@ word sequences and positions.”
 
 With our new one-hot encoding recipe ready, we create the model object.
 
-- “Linear stacks of layers.”
-- First layer embedding “will take each observation … and make dense
-  vectors from our word sequences. This turns each observation into a …
-  data cube.”
-- “The \[flatten\] layer takes the matrix for each observation and
-  flattens them into one dimension. This \[creates\] a … long vector for
-  each observation.”
-- “Lastly, we have 2 densely connected layers. The last layer has a
-  sigmoid activation function to give us an output between 0 and 1,
-  since we want to model a probability for a binary classification
-  problem.”
+- Input layers:
+  - Embedding layer of 128 dimensions.
+- Hidden layers:
+  - Flatten layers (turns 2D embedding layer shape to 1D).
+  - Dropout of 50%.
+  - Dense layer of 128 units and ReLU activation.
+- Output layers:
+  - Dense layer of 1 unit and sigmoid activation.
 
-<img src="README_files/figure-gfm/dnn_plot-1.png"  />
+<img src="README_files/figure-gfm/dnn-1.png"  />
 
 ## Comparison
 
